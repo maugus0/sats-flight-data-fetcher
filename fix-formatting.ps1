@@ -17,7 +17,7 @@ Write-Host ""
 
 # Sort imports with isort
 Write-Host "2️⃣  Sorting imports with isort..." -ForegroundColor Yellow
-python -m isort *.py tests/*.py
+python -m isort --profile=black --line-length=120 *.py tests/*.py
 if ($LASTEXITCODE -eq 0) {
     Write-Host "✅ Imports sorted" -ForegroundColor Green
 } else {

@@ -30,7 +30,7 @@ jobs:
 
       - name: Check import sorting (isort)
         run: |
-          isort --check-only --diff *.py tests/ || (echo "❌ Import sorting failed. Run: isort *.py tests/" && exit 1)
+          isort --check-only --diff --profile=black --line-length=120 *.py tests/ || (echo "❌ Import sorting failed. Run: isort *.py tests/" && exit 1)
 
   lint:
     name: Linting & Code Quality

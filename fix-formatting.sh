@@ -13,7 +13,7 @@ echo ""
 
 # Sort imports with isort
 echo "2️⃣  Sorting imports with isort..."
-python -m isort *.py tests/*.py
+python -m isort --profile=black --line-length=120 *.py tests/*.py
 echo "✅ Imports sorted"
 echo ""
 

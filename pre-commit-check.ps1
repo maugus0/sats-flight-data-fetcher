@@ -66,12 +66,12 @@ Write-Host ""
 # 2. Import sorting check
 Write-Host "2️⃣  Checking import sorting (isort)..." -ForegroundColor Cyan
 try {
-    $output = python -m isort --check-only --diff *.py tests/*.py 2>&1
+    $output = python -m isort --check-only --diff --profile=black --line-length=120 *.py tests/*.py 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-Host "✅ Import sorting is correct" -ForegroundColor Green
     } else {
         Write-Host "❌ Import sorting failed" -ForegroundColor Red
-        Write-Host "💡 Fix with: python -m isort *.py tests/*.py" -ForegroundColor Yellow
+        Write-Host "💡 Fix with: python -m isort --profile=black --line-length=120 *.py tests/*.py" -ForegroundColor Yellow
         $failed = $true
     }
 } catch {
@@ -135,7 +135,7 @@ if (-not $failed) {
     Write-Host ""
     Write-Host "Quick fix commands:" -ForegroundColor Yellow
     Write-Host "  python -m black *.py tests/*.py          # Auto-format code"
-    Write-Host "  python -m isort *.py tests/*.py          # Auto-sort imports"
+    Write-Host "  python -m isort --profile=black --line-length=120 *.py tests/*.py  # Auto-sort imports"
     Write-Host "  flake8 *.py tests/*.py          # Show linting errors"
     exit 1
 }

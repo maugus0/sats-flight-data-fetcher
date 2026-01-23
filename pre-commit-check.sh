@@ -67,11 +67,11 @@ echo ""
 
 # 2. Import sorting check
 echo "2️⃣  Checking import sorting (isort)..."
-if python -m isort --check-only --diff *.py tests/*.py 2>&1; then
+if python -m isort --check-only --diff --profile=black --line-length=120 *.py tests/*.py 2>&1; then
     echo -e "${GREEN}✅ Import sorting is correct${NC}"
 else
     echo -e "${RED}❌ Import sorting failed${NC}"
-    echo -e "${YELLOW}💡 Fix with: python -m isort *.py tests/*.py${NC}"
+    echo -e "${YELLOW}💡 Fix with: python -m isort --profile=black --line-length=120 *.py tests/*.py${NC}"
     FAILED=1
 fi
 echo ""
@@ -116,7 +116,7 @@ else
     echo ""
     echo "Quick fix commands:"
     echo "  python -m black *.py tests/*.py          # Auto-format code"
-    echo "  python -m isort *.py tests/*.py          # Auto-sort imports"
+    echo "  python -m isort --profile=black --line-length=120 *.py tests/*.py  # Auto-sort imports"
     echo "  flake8 *.py tests/*.py          # Show linting errors"
     exit 1
 fi
