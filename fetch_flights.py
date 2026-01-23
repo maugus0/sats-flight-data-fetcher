@@ -21,19 +21,19 @@ EXAMPLES:
 """
 
 import argparse
+import csv
 import json
 import os
+import re
 import sys
 import time
-import csv
-import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from tqdm import tqdm
 
 # Load environment variables

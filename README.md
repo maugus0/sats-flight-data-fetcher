@@ -1,6 +1,6 @@
 # ✈️ Airlines Flight Data Fetcher
 
-[![CI/CD Pipeline](https://github.com/maugus0/sats-flight-data-fetcher/actions/workflows/ci.yml/badge.svg)](https://github.com/maugus0/sats-flight-data-fetcher/actions/workflows/ci.yml)
+[![CI/CD Pipeline](https://github.com/maugus0/sats-flight-data-fetcher/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/maugus0/sats-flight-data-fetcher/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 ![API](https://img.shields.io/badge/API-AirLabs-orange.svg)
@@ -17,6 +17,8 @@ A simple, user-friendly Python tool to fetch flight data for any major airline. 
 - **Progress Tracking** - Visual progress bar for multi-day fetches
 - **Automatic Checkpoints** - Raw data saved for recovery
 - **Summary Statistics** - On-time performance, delays, top routes
+- **CI/CD Pipeline** - Automated testing, formatting, and security checks
+- **Pre-commit Hooks** - Catch issues before pushing to GitHub
 
 ## 📋 Quick Start
 
@@ -166,13 +168,19 @@ sats-flight-data-fetcher/
 ├── airlines_config.json    # Airline definitions
 ├── fetch_flights.py        # Main script
 ├── pytest.ini              # Test configuration
+├── pre-commit-check.ps1    # Pre-commit checks (Windows)
+├── pre-commit-check.sh     # Pre-commit checks (Linux/macOS)
+├── fix-formatting.ps1      # Auto-fix formatting (Windows)
+├── fix-formatting.sh        # Auto-fix formatting (Linux/macOS)
 ├── tests/                  # Test suite
 │   ├── conftest.py
 │   ├── test_fetch_flights.py
 │   └── test_config.py
 ├── .github/
-│   └── workflows/
-│       └── ci.yml          # CI/CD pipeline
+│   ├── workflows/
+│   │   └── ci.yml          # CI/CD pipeline
+│   ├── ISSUE_TEMPLATE/     # Issue templates
+│   └── PULL_REQUEST_TEMPLATE.md
 └── outputs/                # Generated files (auto-created)
 ```
 
@@ -193,6 +201,9 @@ A: The script automatically waits and retries. If issues persist, wait a few min
 **Q: Where are my files saved?**
 A: In the `outputs/` folder with timestamps (e.g., `SQ_2025-01-20_143052.xlsx`).
 
+**Q: My CI/CD pipeline failed. What should I do?**
+A: Run `.\pre-commit-check.ps1` (or `./pre-commit-check.sh`) locally to see the same errors. Fix them with `.\fix-formatting.ps1` if needed, then commit and push again.
+
 ## 🔧 Troubleshooting
 
 | Issue | Solution |
@@ -202,6 +213,20 @@ A: In the `outputs/` folder with timestamps (e.g., `SQ_2025-01-20_143052.xlsx`).
 | "Invalid date" | Use format `YYYY-MM-DD` (e.g., 2025-01-20) |
 | "No flights found" | Check if airline operated on that date |
 | Timeout errors | Check internet connection, retry in a few minutes |
+| CI/CD badge shows "no status" | The workflow needs to complete at least once. Push your code, wait for the workflow to finish, then the badge will update. Check the [Actions tab](https://github.com/maugus0/sats-flight-data-fetcher/actions) |
+
+## 🚀 CI/CD Pipeline
+
+This project includes a complete CI/CD pipeline that runs automatically on every push and pull request:
+
+- **Code Formatting** - Ensures consistent code style with Black
+- **Linting** - Catches code quality issues with flake8 and pylint
+- **Unit Tests** - Runs comprehensive test suite with 70%+ coverage requirement
+- **Security Scanning** - Checks for vulnerabilities with Bandit and Safety
+- **Config Validation** - Validates JSON configs and requirements files
+- **Integration Tests** - Verifies script imports and CLI commands work
+
+View the pipeline status in the badge at the top of this README, or check the [Actions tab](https://github.com/maugus0/sats-flight-data-fetcher/actions) on GitHub.
 
 ## 🧪 Development
 
@@ -222,12 +247,75 @@ pytest tests/ --cov=. --cov-report=html
 
 ```bash
 # Format code
-black fetch_flights.py tests/
-isort fetch_flights.py tests/
+python -m black fetch_flights.py tests/
+python -m isort fetch_flights.py tests/
 
 # Lint
 flake8 fetch_flights.py tests/
 ```
+
+### Pre-commit Checks
+
+**Always run pre-commit checks before pushing to GitHub!** This prevents CI/CD pipeline failures.
+
+#### Run Pre-commit Checks
+
+**Windows (PowerShell):**
+```powershell
+.\pre-commit-check.ps1
+```
+
+**Linux/macOS:**
+```bash
+chmod +x pre-commit-check.sh
+./pre-commit-check.sh
+```
+
+The script checks:
+- ✅ Code formatting (Black)
+- ✅ Import sorting (isort)
+- ✅ Linting (flake8)
+- ✅ Python syntax validation
+- ✅ JSON config validation
+- ✅ Security (no hardcoded API keys)
+
+#### Auto-fix Formatting Issues
+
+If formatting issues are found, auto-fix them:
+
+**Windows:**
+```powershell
+.\fix-formatting.ps1
+```
+
+**Linux/macOS:**
+```bash
+chmod +x fix-formatting.sh
+./fix-formatting.sh
+```
+
+Then run the pre-commit check again to verify everything passes.
+
+#### Workflow
+
+```bash
+# 1. Make your changes
+# 2. Run pre-commit check
+.\pre-commit-check.ps1  # or ./pre-commit-check.sh
+
+# 3. If issues found, auto-fix
+.\fix-formatting.ps1  # or ./fix-formatting.sh
+
+# 4. Run check again to verify
+.\pre-commit-check.ps1
+
+# 5. Commit and push
+git add .
+git commit -m "your message"
+git push
+```
+
+> **Tip:** Add these scripts to your git workflow to catch issues early and keep your CI/CD pipeline green! 🟢
 
 ## 📝 License
 
@@ -235,12 +323,20 @@ MIT License - feel free to use, modify, and distribute.
 
 ## 🤝 Contributing
 
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
-- Fork the repo
-- Create a feature branch
-- Run tests: `pytest tests/ -v`
-- Submit a pull request
+### Quick Contribution Guide
+
+1. **Fork the repo** and clone your fork
+2. **Create a feature branch**: `git checkout -b feature/your-feature`
+3. **Install dev dependencies**: `pip install -r requirements-dev.txt`
+4. **Make your changes**
+5. **Run pre-commit checks**: `.\pre-commit-check.ps1` (or `./pre-commit-check.sh`)
+6. **Run tests**: `pytest tests/ -v`
+7. **Commit and push**: `git push origin feature/your-feature`
+8. **Create a Pull Request**
+
+> **Important:** All PRs must pass pre-commit checks and tests. The CI/CD pipeline will verify this automatically.
 
 ---
 
