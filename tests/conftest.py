@@ -2,10 +2,6 @@
 Pytest configuration and fixtures
 """
 
-import json
-import os
-from datetime import datetime, timedelta
-
 import pytest
 
 
@@ -20,9 +16,19 @@ def mock_airline_config():
     """Provide mock airline configuration (matches actual structure)"""
     return {
         "airlines": {
-            "SQ": {"name": "Singapore Airlines", "iata": "SQ", "icao": "SIA", "country": "Singapore"},
+            "SQ": {
+                "name": "Singapore Airlines",
+                "iata": "SQ",
+                "icao": "SIA",
+                "country": "Singapore",
+            },
             "EK": {"name": "Emirates", "iata": "EK", "icao": "UAE", "country": "UAE"},
-            "QR": {"name": "Qatar Airways", "iata": "QR", "icao": "QTR", "country": "Qatar"},
+            "QR": {
+                "name": "Qatar Airways",
+                "iata": "QR",
+                "icao": "QTR",
+                "country": "Qatar",
+            },
         }
     }
 
@@ -96,4 +102,3 @@ def temp_output_dir(tmp_path):
 def mock_env_vars(monkeypatch, mock_api_key):
     """Set mock environment variables"""
     monkeypatch.setenv("AIRLABS_API_KEY", mock_api_key)
-

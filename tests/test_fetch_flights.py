@@ -5,9 +5,8 @@ Unit tests for fetch_flights.py
 import json
 import os
 import sys
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
-import pytest
 import requests
 
 # Add parent directory to path for imports
@@ -49,7 +48,9 @@ class TestFetchFlightsForDate:
         with patch("requests.get") as mock_get:
             mock_response = Mock()
             mock_response.status_code = 500
-            mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("Server error")
+            mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+                "Server error"
+            )
             mock_get.return_value = mock_response
 
             from fetch_flights import fetch_flights_for_date
@@ -273,4 +274,3 @@ class TestAirlineConfig:
         assert info_lower is not None
         assert info_upper is not None
         assert info_lower["name"] == info_upper["name"]
-

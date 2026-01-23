@@ -5,8 +5,6 @@ Tests for configuration validation
 import json
 import os
 
-import pytest
-
 
 class TestAirlinesConfig:
     """Tests for airlines_config.json"""
@@ -102,4 +100,3 @@ class TestRequirements:
             assert "pytest" in content
             assert "black" in content
             assert "flake8" in content
-
