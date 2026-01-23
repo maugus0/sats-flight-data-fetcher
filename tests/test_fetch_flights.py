@@ -7,6 +7,7 @@ import os
 import sys
 from unittest.mock import Mock, patch
 
+import pytest
 import requests
 
 # Add parent directory to path for imports
@@ -272,3 +273,488 @@ class TestAirlineConfig:
         assert info_lower is not None
         assert info_upper is not None
         assert info_lower["name"] == info_upper["name"]
+
+
+class TestLoadAirlinesConfig:
+    """Tests for load_airlines_config function"""
+
+    def test_load_config_success(self):
+        """Test successful config loading"""
+        from fetch_flights import load_airlines_config
+
+        config = load_airlines_config()
+
+        assert isinstance(config, dict)
+        assert "airlines" in config
+        assert "SQ" in config["airlines"]
+
+    @patch("builtins.open")
+    def test_load_config_file_not_found(self, mock_open):
+        """Test handling of missing config file"""
+        from fetch_flights import load_airlines_config
+
+        mock_open.side_effect = FileNotFoundError()
+
+        with patch("builtins.print"):
+            with pytest.raises(SystemExit):
+                load_airlines_config()
+
+    @patch("builtins.open")
+    @patch("json.load")
+    def test_load_config_invalid_json(self, mock_json_load, mock_open):
+        """Test handling of invalid JSON in config"""
+        from fetch_flights import load_airlines_config
+
+        mock_json_load.side_effect = json.JSONDecodeError("Invalid JSON", "", 0)
+
+        with patch("builtins.print"):
+            with pytest.raises(SystemExit):
+                load_airlines_config()
+
+
+class TestListAirlines:
+    """Tests for list_airlines function"""
+
+    def test_list_airlines(self, mock_airline_config, capsys):
+        """Test listing airlines"""
+        from fetch_flights import list_airlines
+
+        list_airlines(mock_airline_config)
+
+        output = capsys.readouterr().out
+        assert "AVAILABLE AIRLINES" in output
+        assert "Singapore Airlines" in output
+        assert "Emirates" in output
+        assert "Total: 3 airlines" in output
+
+
+class TestGetApiKey:
+    """Tests for get_api_key function"""
+
+    def test_get_api_key_from_env(self, mock_env_vars, capsys):
+        """Test getting API key from environment"""
+        from fetch_flights import get_api_key
+
+        api_key = get_api_key()
+
+        assert api_key == "test_api_key_1234567890abcdef"
+        output = capsys.readouterr().out
+        assert "[INFO] Using API key from .env file" in output
+
+    @patch("builtins.input")
+    def test_get_api_key_from_input(self, mock_input, monkeypatch, capsys):
+        """Test getting API key from user input"""
+        from fetch_flights import get_api_key
+
+        monkeypatch.delenv("AIRLABS_API_KEY", raising=False)
+        mock_input.return_value = "user_entered_key_12345"
+
+        api_key = get_api_key()
+
+        assert api_key == "user_entered_key_12345"
+        output = capsys.readouterr().out
+        assert "[WARN] No API key found" in output
+
+    @patch("builtins.input")
+    def test_get_api_key_empty_input(self, mock_input, monkeypatch):
+        """Test handling of empty API key input"""
+        import sys
+
+        from fetch_flights import get_api_key
+
+        monkeypatch.delenv("AIRLABS_API_KEY", raising=False)
+        mock_input.return_value = ""
+
+        with patch("builtins.print"):
+            with pytest.raises(SystemExit):
+                get_api_key()
+
+
+class TestFetchFlightsRetry:
+    """Tests for fetch_flights_for_date retry logic"""
+
+    def test_fetch_retry_on_timeout(self, mock_api_key, sample_date):
+        """Test retry logic on timeout"""
+        from fetch_flights import fetch_flights_for_date
+
+        with patch("requests.get") as mock_get:
+            # First two attempts timeout, third succeeds
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {"response": []}
+            mock_response.raise_for_status = Mock()
+
+            mock_get.side_effect = [
+                requests.exceptions.Timeout("Timeout 1"),
+                requests.exceptions.Timeout("Timeout 2"),
+                mock_response,
+            ]
+
+            with patch("time.sleep"):
+                result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
+
+            assert result is not None
+            assert mock_get.call_count == 3
+
+    def test_fetch_retry_on_rate_limit(self, mock_api_key, sample_date):
+        """Test retry logic on rate limiting"""
+        from fetch_flights import fetch_flights_for_date
+
+        with patch("requests.get") as mock_get:
+            mock_response_429 = Mock()
+            mock_response_429.status_code = 429
+            mock_response_429.raise_for_status.side_effect = (
+                requests.exceptions.HTTPError("Rate limited")
+            )
+
+            mock_response_200 = Mock()
+            mock_response_200.status_code = 200
+            mock_response_200.json.return_value = {"response": []}
+            mock_response_200.raise_for_status = Mock()
+
+            mock_get.side_effect = [mock_response_429, mock_response_200]
+
+            with patch("time.sleep"):
+                result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
+
+            assert result is not None
+            assert mock_get.call_count == 2
+
+
+class TestSaveCheckpoint:
+    """Tests for save_checkpoint function"""
+
+    def test_save_checkpoint(self, mock_api_response, temp_output_dir, monkeypatch):
+        """Test checkpoint file creation"""
+        import fetch_flights
+        from fetch_flights import save_checkpoint
+
+        # Temporarily change OUTPUT_DIR for test
+        original_dir = fetch_flights.OUTPUT_DIR
+        fetch_flights.OUTPUT_DIR = temp_output_dir
+
+        try:
+            filepath = save_checkpoint(mock_api_response, "SQ", "2025-01-01")
+
+            assert "checkpoint_SQ_2025-01-01.json" in filepath
+            assert os.path.exists(filepath)
+
+            with open(filepath, "r") as f:
+                data = json.load(f)
+                assert data == mock_api_response
+        finally:
+            fetch_flights.OUTPUT_DIR = original_dir
+
+
+class TestGenerateOutputFilename:
+    """Tests for generate_output_filename function"""
+
+    def test_generate_output_filename_csv(self):
+        """Test filename generation for CSV"""
+        from fetch_flights import generate_output_filename
+
+        filename = generate_output_filename("SQ", "csv")
+
+        assert "SQ_" in filename
+        assert filename.endswith(".csv")
+        assert "outputs" in filename
+
+    def test_generate_output_filename_excel(self):
+        """Test filename generation for Excel"""
+        from fetch_flights import generate_output_filename
+
+        filename = generate_output_filename("EK", "excel")
+
+        assert "EK_" in filename
+        assert filename.endswith(".xlsx")
+        assert "outputs" in filename
+
+    def test_generate_output_filename_json(self):
+        """Test filename generation for JSON"""
+        from fetch_flights import generate_output_filename
+
+        filename = generate_output_filename("QR", "json")
+
+        assert "QR_" in filename
+        assert filename.endswith(".json")
+        assert "outputs" in filename
+
+
+class TestInteractiveMode:
+    """Tests for interactive_mode function"""
+
+    @patch("builtins.input")
+    def test_interactive_mode_defaults(self, mock_input, mock_airline_config):
+        """Test interactive mode with default values"""
+        from fetch_flights import interactive_mode
+
+        mock_input.side_effect = ["", "", "", ""]  # All defaults
+
+        airline, start_date, end_date, output_format = interactive_mode(
+            mock_airline_config
+        )
+
+        from fetch_flights import validate_date
+
+        assert airline == "SQ"
+        assert output_format == "excel"
+        assert validate_date(start_date)
+        assert validate_date(end_date)
+
+    @patch("builtins.input")
+    def test_interactive_mode_custom_values(self, mock_input, mock_airline_config):
+        """Test interactive mode with custom values"""
+        from fetch_flights import interactive_mode
+
+        mock_input.side_effect = ["EK", "2025-01-01", "2025-01-07", "csv"]
+
+        airline, start_date, end_date, output_format = interactive_mode(
+            mock_airline_config
+        )
+
+        assert airline == "EK"
+        assert start_date == "2025-01-01"
+        assert end_date == "2025-01-07"
+        assert output_format == "csv"
+
+    @patch("builtins.input")
+    def test_interactive_mode_list_airlines(
+        self, mock_input, mock_airline_config, capsys
+    ):
+        """Test interactive mode with list command"""
+        from fetch_flights import interactive_mode
+
+        mock_input.side_effect = ["list", "SQ", "", "", ""]
+
+        airline, start_date, end_date, output_format = interactive_mode(
+            mock_airline_config
+        )
+
+        assert airline == "SQ"
+        output = capsys.readouterr().out
+        assert "AVAILABLE AIRLINES" in output
+
+
+class TestFetchDateRange:
+    """Tests for fetch_date_range function"""
+
+    @patch("fetch_flights.tqdm")
+    @patch("fetch_flights.fetch_flights_for_date")
+    @patch("fetch_flights.save_checkpoint")
+    @patch("time.sleep")
+    def test_fetch_date_range_single_day(
+        self,
+        mock_sleep,
+        mock_save,
+        mock_fetch,
+        mock_tqdm,
+        mock_api_key,
+        mock_api_response,
+    ):
+        """Test fetching single day"""
+        from fetch_flights import extract_flight_data, fetch_date_range
+
+        mock_fetch.return_value = mock_api_response
+        mock_tqdm.return_value.__enter__.return_value = Mock()
+
+        flights = fetch_date_range(mock_api_key, "SQ", "2025-01-01", "2025-01-01")
+
+        assert len(flights) == 3
+        assert mock_fetch.call_count == 1
+        assert mock_save.call_count == 1
+
+    @patch("fetch_flights.tqdm")
+    @patch("fetch_flights.fetch_flights_for_date")
+    @patch("fetch_flights.save_checkpoint")
+    @patch("time.sleep")
+    def test_fetch_date_range_multiple_days(
+        self,
+        mock_sleep,
+        mock_save,
+        mock_fetch,
+        mock_tqdm,
+        mock_api_key,
+        mock_api_response,
+    ):
+        """Test fetching multiple days"""
+        from fetch_flights import fetch_date_range
+
+        mock_fetch.return_value = mock_api_response
+        mock_tqdm.return_value.__enter__.return_value = Mock()
+
+        flights = fetch_date_range(mock_api_key, "SQ", "2025-01-01", "2025-01-03")
+
+        assert len(flights) == 9  # 3 days * 3 flights
+        assert mock_fetch.call_count == 3
+        assert mock_save.call_count == 3
+
+    @patch("fetch_flights.tqdm")
+    @patch("fetch_flights.fetch_flights_for_date")
+    @patch("time.sleep")
+    def test_fetch_date_range_no_data(
+        self, mock_sleep, mock_fetch, mock_tqdm, mock_api_key
+    ):
+        """Test fetching when no data returned"""
+        from fetch_flights import fetch_date_range
+
+        mock_fetch.return_value = None
+        mock_tqdm.return_value.__enter__.return_value = Mock()
+
+        flights = fetch_date_range(mock_api_key, "SQ", "2025-01-01", "2025-01-01")
+
+        assert flights == []
+
+
+class TestMainFunction:
+    """Tests for main() function"""
+
+    @patch("fetch_flights.list_airlines")
+    @patch("sys.exit")
+    def test_main_list_airlines(self, mock_exit, mock_list, mock_airline_config):
+        """Test --list-airlines command"""
+        from fetch_flights import main
+
+        with patch("sys.argv", ["fetch_flights.py", "--list-airlines"]):
+            with patch(
+                "fetch_flights.load_airlines_config", return_value=mock_airline_config
+            ):
+                main()
+
+        mock_list.assert_called_once()
+        mock_exit.assert_called_once_with(0)
+
+    @patch("fetch_flights.fetch_date_range")
+    @patch("fetch_flights.get_api_key")
+    @patch("builtins.input")
+    @patch("fetch_flights.validate_api_key")
+    @patch("fetch_flights.export_to_excel")
+    @patch("fetch_flights.generate_output_filename")
+    @patch("fetch_flights.generate_summary")
+    def test_main_yesterday_flag(
+        self,
+        mock_summary,
+        mock_filename,
+        mock_export,
+        mock_validate,
+        mock_input,
+        mock_get_key,
+        mock_fetch,
+        mock_airline_config,
+        mock_api_response,
+    ):
+        """Test main with --yesterday flag"""
+        from fetch_flights import extract_flight_data, main
+
+        mock_get_key.return_value = "test_key"
+        mock_validate.return_value = True
+        mock_input.return_value = "y"
+        mock_fetch.return_value = extract_flight_data(mock_api_response)
+        mock_filename.return_value = "outputs/test.xlsx"
+        mock_summary.return_value = {
+            "total_flights": 3,
+            "average_delay_minutes": 5.0,
+            "on_time_percentage": 80.0,
+            "cancelled_flights": 0,
+        }
+
+        with patch("sys.argv", ["fetch_flights.py", "--airline", "SQ", "--yesterday"]):
+            with patch(
+                "fetch_flights.load_airlines_config", return_value=mock_airline_config
+            ):
+                with patch("builtins.print"):
+                    main()
+
+        mock_fetch.assert_called_once()
+        mock_export.assert_called_once()
+
+    @patch("sys.exit")
+    def test_main_invalid_airline(self, mock_exit, mock_airline_config):
+        """Test main with invalid airline"""
+        from fetch_flights import main
+
+        with patch("sys.argv", ["fetch_flights.py", "--airline", "XX", "--yesterday"]):
+            with patch(
+                "fetch_flights.load_airlines_config", return_value=mock_airline_config
+            ):
+                with patch("builtins.print"):
+                    main()
+
+        mock_exit.assert_called_once_with(1)
+
+    @patch("sys.exit")
+    def test_main_missing_start_date(self, mock_exit, mock_airline_config):
+        """Test main with missing start date"""
+        from fetch_flights import main
+
+        with patch("sys.argv", ["fetch_flights.py", "--airline", "SQ"]):
+            with patch(
+                "fetch_flights.load_airlines_config", return_value=mock_airline_config
+            ):
+                with patch("builtins.print"):
+                    main()
+
+        mock_exit.assert_called_once_with(1)
+
+    @patch("sys.exit")
+    def test_main_invalid_date(self, mock_exit, mock_airline_config):
+        """Test main with invalid date format"""
+        from fetch_flights import main
+
+        with patch(
+            "sys.argv",
+            ["fetch_flights.py", "--airline", "SQ", "--start-date", "invalid-date"],
+        ):
+            with patch(
+                "fetch_flights.load_airlines_config", return_value=mock_airline_config
+            ):
+                with patch("builtins.print"):
+                    main()
+
+        mock_exit.assert_called_once_with(1)
+
+    @patch("fetch_flights.fetch_date_range")
+    @patch("fetch_flights.get_api_key")
+    @patch("builtins.input")
+    @patch("sys.exit")
+    def test_main_no_flights_found(
+        self, mock_exit, mock_input, mock_get_key, mock_fetch, mock_airline_config
+    ):
+        """Test main when no flights are found"""
+        from fetch_flights import main
+
+        mock_get_key.return_value = "test_key"
+        mock_input.return_value = "y"
+        mock_fetch.return_value = []
+
+        with patch("sys.argv", ["fetch_flights.py", "--airline", "SQ", "--yesterday"]):
+            with patch(
+                "fetch_flights.load_airlines_config", return_value=mock_airline_config
+            ):
+                with patch("builtins.print"):
+                    main()
+
+        mock_exit.assert_called_once_with(0)
+
+    @patch("fetch_flights.fetch_date_range")
+    @patch("fetch_flights.get_api_key")
+    @patch("builtins.input")
+    @patch("sys.exit")
+    def test_main_user_cancels(
+        self, mock_exit, mock_input, mock_get_key, mock_fetch, mock_airline_config
+    ):
+        """Test main when user cancels"""
+        import sys
+
+        from fetch_flights import main
+
+        mock_get_key.return_value = "test_key"
+        mock_input.return_value = "n"
+
+        with patch("sys.argv", ["fetch_flights.py", "--airline", "SQ", "--yesterday"]):
+            with patch(
+                "fetch_flights.load_airlines_config", return_value=mock_airline_config
+            ):
+                with patch("builtins.print"):
+                    main()
+
+        mock_exit.assert_called_once_with(0)
