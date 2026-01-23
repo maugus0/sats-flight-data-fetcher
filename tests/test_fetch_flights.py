@@ -167,8 +167,7 @@ class TestExportFunctions:
 
     def test_export_to_json(self, mock_api_response, temp_output_dir):
         """Test JSON export functionality"""
-        from fetch_flights import (export_to_json, extract_flight_data,
-                                   generate_summary)
+        from fetch_flights import export_to_json, extract_flight_data, generate_summary
 
         flights = extract_flight_data(mock_api_response)
         summary = generate_summary(flights)
@@ -186,8 +185,7 @@ class TestExportFunctions:
 
     def test_export_to_excel(self, mock_api_response, temp_output_dir):
         """Test Excel export functionality"""
-        from fetch_flights import (export_to_excel, extract_flight_data,
-                                   generate_summary)
+        from fetch_flights import export_to_excel, extract_flight_data, generate_summary
 
         flights = extract_flight_data(mock_api_response)
         summary = generate_summary(flights)
