@@ -358,8 +358,6 @@ class TestGetApiKey:
     @patch("builtins.input")
     def test_get_api_key_empty_input(self, mock_input, monkeypatch):
         """Test handling of empty API key input"""
-        import sys
-
         from fetch_flights import get_api_key
 
         monkeypatch.delenv("AIRLABS_API_KEY", raising=False)
@@ -552,7 +550,7 @@ class TestFetchDateRange:
         mock_api_response,
     ):
         """Test fetching single day"""
-        from fetch_flights import extract_flight_data, fetch_date_range
+        from fetch_flights import fetch_date_range
 
         mock_fetch.return_value = mock_api_response
         mock_tqdm.return_value.__enter__.return_value = Mock()
@@ -743,8 +741,6 @@ class TestMainFunction:
         self, mock_exit, mock_input, mock_get_key, mock_fetch, mock_airline_config
     ):
         """Test main when user cancels"""
-        import sys
-
         from fetch_flights import main
 
         mock_get_key.return_value = "test_key"
