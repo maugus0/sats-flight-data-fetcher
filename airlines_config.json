@@ -1,0 +1,95 @@
+{
+  "airlines": {
+    "SQ": {
+      "name": "Singapore Airlines",
+      "iata": "SQ",
+      "icao": "SIA",
+      "country": "Singapore"
+    },
+    "EK": {
+      "name": "Emirates",
+      "iata": "EK",
+      "icao": "UAE",
+      "country": "United Arab Emirates"
+    },
+    "QR": {
+      "name": "Qatar Airways",
+      "iata": "QR",
+      "icao": "QTR",
+      "country": "Qatar"
+    },
+    "BA": {
+      "name": "British Airways",
+      "iata": "BA",
+      "icao": "BAW",
+      "country": "United Kingdom"
+    },
+    "LH": {
+      "name": "Lufthansa",
+      "iata": "LH",
+      "icao": "DLH",
+      "country": "Germany"
+    },
+    "AF": {
+      "name": "Air France",
+      "iata": "AF",
+      "icao": "AFR",
+      "country": "France"
+    },
+    "AA": {
+      "name": "American Airlines",
+      "iata": "AA",
+      "icao": "AAL",
+      "country": "United States"
+    },
+    "UA": {
+      "name": "United Airlines",
+      "iata": "UA",
+      "icao": "UAL",
+      "country": "United States"
+    },
+    "DL": {
+      "name": "Delta Air Lines",
+      "iata": "DL",
+      "icao": "DAL",
+      "country": "United States"
+    },
+    "CX": {
+      "name": "Cathay Pacific",
+      "iata": "CX",
+      "icao": "CPA",
+      "country": "Hong Kong"
+    },
+    "NH": {
+      "name": "All Nippon Airways",
+      "iata": "NH",
+      "icao": "ANA",
+      "country": "Japan"
+    },
+    "JL": {
+      "name": "Japan Airlines",
+      "iata": "JL",
+      "icao": "JAL",
+      "country": "Japan"
+    },
+    "QF": {
+      "name": "Qantas",
+      "iata": "QF",
+      "icao": "QFA",
+      "country": "Australia"
+    },
+    "TK": {
+      "name": "Turkish Airlines",
+      "iata": "TK",
+      "icao": "THY",
+      "country": "Turkey"
+    },
+    "KE": {
+      "name": "Korean Air",
+      "iata": "KE",
+      "icao": "KAL",
+      "country": "South Korea"
+    }
+  }
+}
+

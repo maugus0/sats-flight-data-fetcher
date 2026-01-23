@@ -1,0 +1,270 @@
+name: Airlines Flight Fetcher CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  format-check:
+    name: Code Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install formatting tools
+        run: |
+          pip install black==23.9.1 isort==5.12.0
+
+      - name: Check code formatting (Black)
+        run: |
+          black --check --diff *.py tests/ || (echo "❌ Code formatting failed. Run: black *.py tests/" && exit 1)
+
+      - name: Check import sorting (isort)
+        run: |
+          isort --check-only --diff *.py tests/ || (echo "❌ Import sorting failed. Run: isort *.py tests/" && exit 1)
+
+  lint:
+    name: Linting & Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run flake8 (linting)
+        run: |
+          flake8 *.py tests/ --max-line-length=120 --extend-ignore=E203,W503 --statistics
+
+      - name: Run pylint (code quality)
+        run: |
+          pylint *.py --max-line-length=120 --disable=C0111,R0903,W0212,C0103 --fail-under=8.0 || true
+
+  test:
+    name: Unit & Integration Tests
+    needs: [format-check, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run syntax validation
+        run: |
+          python -m py_compile fetch_flights.py
+          python -c "import json; json.load(open('airlines_config.json'))"
+
+      - name: Run unit tests with coverage
+        env:
+          AIRLABS_API_KEY: "test_key_12345"
+        run: |
+          pytest tests/ -v --cov=. --cov-report=xml --cov-report=html --cov-report=term --tb=short
+
+      - name: Check test coverage threshold
+        run: |
+          coverage report --fail-under=70
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            htmlcov/
+            coverage.xml
+          retention-days: 7
+
+  security-scan:
+    name: Security Audit
+    needs: [format-check, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install security tools
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run Bandit (security scanner)
+        run: |
+          bandit -r *.py -f json -o bandit-report.json || true
+          bandit -r *.py -ll -i
+
+      - name: Run Safety (dependency vulnerabilities)
+        run: |
+          safety check --json --output safety-report.json || true
+          safety check || true
+
+      - name: Check for secrets in code
+        run: |
+          grep -r "AIRLABS_API_KEY.*=.*['\"][a-zA-Z0-9]" *.py && echo "❌ Found hardcoded API key!" && exit 1 || echo "✅ No hardcoded secrets found"
+
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            safety-report.json
+          retention-days: 7
+
+  validate-configs:
+    name: Validate Configurations
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate airlines_config.json
+        run: |
+          python -c "
+          import json
+          import sys
+
+          try:
+              with open('airlines_config.json') as f:
+                  config = json.load(f)
+
+              # Validate structure
+              if not isinstance(config, dict):
+                  print('❌ airlines_config.json must be a dictionary')
+                  sys.exit(1)
+
+              # Check for airlines key
+              airlines = config.get('airlines', config)
+
+              # Validate each airline entry
+              for code, info in airlines.items():
+                  if not isinstance(info, dict):
+                      print(f'❌ Airline {code} must have a dictionary value')
+                      sys.exit(1)
+                  if 'name' not in info:
+                      print(f'❌ Airline {code} missing name field')
+                      sys.exit(1)
+                  if 'iata' not in info and 'icao' not in info:
+                      print(f'❌ Airline {code} missing iata or icao field')
+                      sys.exit(1)
+
+              print(f'✅ Validated {len(airlines)} airlines in config')
+          except Exception as e:
+              print(f'❌ Error validating airlines_config.json: {e}')
+              sys.exit(1)
+          "
+
+      - name: Validate requirements.txt
+        run: |
+          pip install --dry-run -r requirements.txt
+
+      - name: Check .env.example format
+        run: |
+          if [ ! -f .env.example ]; then
+            echo "❌ .env.example file missing"
+            exit 1
+          fi
+          if ! grep -q "AIRLABS_API_KEY" .env.example; then
+            echo "❌ .env.example missing AIRLABS_API_KEY"
+            exit 1
+          fi
+          echo "✅ .env.example is valid"
+
+  integration-test:
+    name: Integration Test (Dry Run)
+    needs: [test, validate-configs]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Test script imports
+        env:
+          AIRLABS_API_KEY: "test_key_12345"
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+          import fetch_flights
+          print('✅ All imports successful')
+          "
+
+      - name: Test --help command
+        run: |
+          python fetch_flights.py --help
+
+      - name: Test --list-airlines command
+        run: |
+          python fetch_flights.py --list-airlines
+
+      - name: Create test outputs directory
+        run: mkdir -p outputs
+
+  summary:
+    name: Pipeline Summary
+    needs: [format-check, lint, test, security-scan, validate-configs, integration-test]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "# 🚀 Airlines Flight Fetcher - CI/CD Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Pipeline Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Code Formatting | ${{ needs.format-check.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Linting | ${{ needs.lint.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ needs.test.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Scan | ${{ needs.security-scan.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Config Validation | ${{ needs.validate-configs.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration Test | ${{ needs.integration-test.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📊 **Artifacts:** Test coverage reports and security scans available" >> $GITHUB_STEP_SUMMARY
+

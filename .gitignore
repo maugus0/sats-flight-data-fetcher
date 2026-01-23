@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment Variables
+.env
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+*.cover
+coverage.xml
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Outputs
+# Keep outputs/ directory but ignore all generated files
+outputs/*.csv
+outputs/*.xlsx
+outputs/*.json
+# Ignore checkpoint files anywhere
+checkpoint_*.json
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Security Reports
+bandit-report.json
+safety-report.json
+
+# Old files from previous version
+sia_fetcher.py
+sia_flights_*.csv
