@@ -607,8 +607,7 @@ class TestMainFunction:
     """Tests for main() function"""
 
     @patch("fetch_flights.list_airlines")
-    @patch("sys.exit")
-    def test_main_list_airlines(self, mock_exit, mock_list, mock_airline_config):
+    def test_main_list_airlines(self, mock_list, mock_airline_config):
         """Test --list-airlines command"""
         from fetch_flights import main
 
@@ -616,7 +615,10 @@ class TestMainFunction:
             with patch(
                 "fetch_flights.load_airlines_config", return_value=mock_airline_config
             ):
-                main()
+                with patch("sys.exit") as mock_exit:
+                    mock_exit.side_effect = SystemExit(0)
+                    with pytest.raises(SystemExit):
+                        main()
 
         mock_list.assert_called_once()
         mock_exit.assert_called_once_with(0)
@@ -666,16 +668,23 @@ class TestMainFunction:
         mock_export.assert_called_once()
 
     @patch("sys.exit")
-    def test_main_invalid_airline(self, mock_exit, mock_airline_config):
+    @patch("builtins.input")
+    def test_main_invalid_airline(self, mock_input, mock_exit, mock_airline_config):
         """Test main with invalid airline"""
         from fetch_flights import main
+
+        def side_effect(*args):
+            raise SystemExit(1)
+
+        mock_exit.side_effect = side_effect
 
         with patch("sys.argv", ["fetch_flights.py", "--airline", "XX", "--yesterday"]):
             with patch(
                 "fetch_flights.load_airlines_config", return_value=mock_airline_config
             ):
                 with patch("builtins.print"):
-                    main()
+                    with pytest.raises(SystemExit):
+                        main()
 
         mock_exit.assert_called_once_with(1)
 
@@ -684,12 +693,18 @@ class TestMainFunction:
         """Test main with missing start date"""
         from fetch_flights import main
 
+        def side_effect(*args):
+            raise SystemExit(1)
+
+        mock_exit.side_effect = side_effect
+
         with patch("sys.argv", ["fetch_flights.py", "--airline", "SQ"]):
             with patch(
                 "fetch_flights.load_airlines_config", return_value=mock_airline_config
             ):
                 with patch("builtins.print"):
-                    main()
+                    with pytest.raises(SystemExit):
+                        main()
 
         mock_exit.assert_called_once_with(1)
 
@@ -697,6 +712,11 @@ class TestMainFunction:
     def test_main_invalid_date(self, mock_exit, mock_airline_config):
         """Test main with invalid date format"""
         from fetch_flights import main
+
+        def side_effect(*args):
+            raise SystemExit(1)
+
+        mock_exit.side_effect = side_effect
 
         with patch(
             "sys.argv",
@@ -706,7 +726,8 @@ class TestMainFunction:
                 "fetch_flights.load_airlines_config", return_value=mock_airline_config
             ):
                 with patch("builtins.print"):
-                    main()
+                    with pytest.raises(SystemExit):
+                        main()
 
         mock_exit.assert_called_once_with(1)
 
@@ -720,6 +741,10 @@ class TestMainFunction:
         """Test main when no flights are found"""
         from fetch_flights import main
 
+        def side_effect(*args):
+            raise SystemExit(0)
+
+        mock_exit.side_effect = side_effect
         mock_get_key.return_value = "test_key"
         mock_input.return_value = "y"
         mock_fetch.return_value = []
@@ -729,7 +754,8 @@ class TestMainFunction:
                 "fetch_flights.load_airlines_config", return_value=mock_airline_config
             ):
                 with patch("builtins.print"):
-                    main()
+                    with pytest.raises(SystemExit):
+                        main()
 
         mock_exit.assert_called_once_with(0)
 

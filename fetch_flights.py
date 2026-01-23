@@ -219,7 +219,15 @@ def extract_flight_data(raw_data: dict) -> list[dict]:
 def generate_summary(flights: list[dict]) -> dict:
     """Generate summary statistics from flight data."""
     if not flights:
-        return {"total_flights": 0}
+        return {
+            "total_flights": 0,
+            "average_delay_minutes": 0,
+            "on_time_percentage": 0,
+            "delayed_flights": 0,
+            "cancelled_flights": 0,
+            "flights_by_status": {},
+            "top_routes": {},
+        }
 
     total = len(flights)
     delays = [f["delay_minutes"] for f in flights if f["delay_minutes"]]

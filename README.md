@@ -1,7 +1,7 @@
 # ✈️ Airlines Flight Data Fetcher
 
 [![CI/CD Pipeline](https://github.com/maugus0/sats-flight-data-fetcher/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/maugus0/sats-flight-data-fetcher/actions/workflows/ci.yml)
-![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
+![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 ![API](https://img.shields.io/badge/API-AirLabs-orange.svg)
 ![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen.svg)
@@ -15,17 +15,19 @@ A simple, user-friendly Python tool to fetch flight data for any major airline. 
 - **Date Range Support** - Fetch single day or multiple days at once
 - **Interactive Mode** - No command line knowledge needed
 - **Progress Tracking** - Visual progress bar for multi-day fetches
-- **Automatic Checkpoints** - Raw data saved for recovery
-- **Summary Statistics** - On-time performance, delays, top routes
-- **CI/CD Pipeline** - Automated testing, formatting, and security checks
+- **Automatic Checkpoints** - Raw JSON data saved for each day (recovery & backup)
+- **Retry Logic** - Automatic retries with exponential backoff (up to 3 attempts)
+- **Summary Statistics** - On-time performance, delays, top routes, status breakdown
+- **CI/CD Pipeline** - Automated testing (94.84% coverage), formatting, and security checks
 - **Pre-commit Hooks** - Catch issues before pushing to GitHub
+- **59 Comprehensive Tests** - Full test suite covering all functionality
 
 ## 📋 Quick Start
 
 ### For Non-Technical Users
 
 1. **Download** this project and extract it to a folder
-2. **Install Python** from [python.org](https://python.org) (version 3.10+)
+2. **Install Python** from [python.org](https://python.org) (version 3.11 or higher)
 3. **Get an API Key** from [AirLabs](https://airlabs.co) (free tier available)
 4. **Open Terminal/Command Prompt** in the project folder
 5. **Run these commands:**
@@ -142,17 +144,28 @@ Creates a `.xlsx` file with two sheets:
 **Sheet 2: Summary**
 - Total flights
 - Average delay (minutes)
-- On-time percentage
+- On-time percentage (< 15 min delay)
+- Delayed flights (≥ 15 min)
+- Cancelled flights
+- Flights by status (landed, scheduled, cancelled, etc.)
 - Top 10 routes
-- Flights by status
 
 ### CSV Output
 
-Simple flat file, easy to import into Excel or databases.
+Simple flat file with all flight data, easy to import into Excel or databases.
 
 ### JSON Output
 
-Complete data with summary statistics, good for developers.
+Complete data structure with:
+- `flights`: Array of all flight records
+- `summary`: Statistics object with all metrics
+
+### Checkpoint Files
+
+Raw JSON responses are automatically saved as `checkpoint_AIRLINE_DATE.json` in the `outputs/` folder. These can be used for:
+- Data recovery if export fails
+- Re-processing data without API calls
+- Debugging API responses
 
 ## 📁 Project Structure
 
@@ -168,14 +181,18 @@ sats-flight-data-fetcher/
 ├── airlines_config.json    # Airline definitions
 ├── fetch_flights.py        # Main script
 ├── pytest.ini              # Test configuration
+├── .flake8                  # Flake8 linting config
+├── .coveragerc              # Coverage reporting config
+├── .pre-commit-config.yaml  # Pre-commit hooks config
 ├── pre-commit-check.ps1    # Pre-commit checks (Windows)
 ├── pre-commit-check.sh     # Pre-commit checks (Linux/macOS)
 ├── fix-formatting.ps1      # Auto-fix formatting (Windows)
-├── fix-formatting.sh        # Auto-fix formatting (Linux/macOS)
-├── tests/                  # Test suite
-│   ├── conftest.py
-│   ├── test_fetch_flights.py
-│   └── test_config.py
+├── fix-formatting.sh       # Auto-fix formatting (Linux/macOS)
+├── tests/                  # Test suite (59 tests)
+│   ├── __init__.py
+│   ├── conftest.py         # Pytest fixtures
+│   ├── test_fetch_flights.py  # Main test file
+│   └── test_config.py      # Config validation tests
 ├── .github/
 │   ├── workflows/
 │   │   └── ci.yml          # CI/CD pipeline
@@ -195,11 +212,11 @@ A: Yes! 1,000 requests/month = 33 days of data daily, or one full month for 30+ 
 **Q: Can I add more airlines?**
 A: Yes! Edit `airlines_config.json` and add any airline with their IATA code.
 
-**Q: What if I get rate limited?**
-A: The script automatically waits and retries. If issues persist, wait a few minutes.
+**Q: What if I get rate limited or timeout?**
+A: The script automatically retries up to 3 times with exponential backoff. Rate limits are handled gracefully with automatic waiting.
 
 **Q: Where are my files saved?**
-A: In the `outputs/` folder with timestamps (e.g., `SQ_2025-01-20_143052.xlsx`).
+A: In the `outputs/` folder with timestamps (e.g., `SQ_2025-01-20_143052.xlsx`). Checkpoint files (raw JSON) are also saved as `checkpoint_AIRLINE_DATE.json` for data recovery.
 
 **Q: My CI/CD pipeline failed. What should I do?**
 A: Run `.\pre-commit-check.ps1` (or `./pre-commit-check.sh`) locally to see the same errors. Fix them with `.\fix-formatting.ps1` if needed, then commit and push again.
@@ -221,7 +238,7 @@ This project includes a complete CI/CD pipeline that runs automatically on every
 
 - **Code Formatting** - Ensures consistent code style with Black
 - **Linting** - Catches code quality issues with flake8 and pylint
-- **Unit Tests** - Runs comprehensive test suite with 70%+ coverage requirement
+- **Unit Tests** - Runs comprehensive test suite (59 tests) with 94.84% code coverage
 - **Security Scanning** - Checks for vulnerabilities with Bandit and Safety
 - **Config Validation** - Validates JSON configs and requirements files
 - **Integration Tests** - Verifies script imports and CLI commands work
@@ -236,22 +253,32 @@ View the pipeline status in the badge at the top of this README, or check the [A
 # Install dev dependencies
 pip install -r requirements-dev.txt
 
-# Run all tests
+# Run all tests (59 tests)
 pytest tests/ -v
 
-# Run with coverage
-pytest tests/ --cov=. --cov-report=html
+# Run with coverage report
+pytest tests/ --cov=fetch_flights --cov-report=html --cov-report=term
+
+# Check coverage threshold (must be >= 70%)
+coverage report --fail-under=70
 ```
+
+**Current Test Coverage: 94.84%** ✅
 
 ### Code Quality
 
 ```bash
-# Format code
+# Format code (Black)
 python -m black fetch_flights.py tests/
-python -m isort fetch_flights.py tests/
 
-# Lint
-flake8 fetch_flights.py tests/
+# Sort imports (isort with Black profile)
+python -m isort --profile=black --line-length=120 fetch_flights.py tests/
+
+# Lint (flake8)
+python -m flake8 fetch_flights.py tests/ --max-line-length=120 --extend-ignore=E203,W503
+
+# Code quality (pylint)
+pylint fetch_flights.py --max-line-length=120 --disable=C0111,R0903,W0212,C0103
 ```
 
 ### Pre-commit Checks
