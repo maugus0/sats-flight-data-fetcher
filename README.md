@@ -132,27 +132,55 @@ Run `python fetch_flights.py --list-airlines` for the full list.
 
 ## 📊 Output Files
 
-### Excel Output (Default)
+### Excel Output (Default) ✨ **Two Sheets Included!**
 
-Creates a `.xlsx` file with two sheets:
+Creates a `.xlsx` file with **two separate sheets**:
 
-**Sheet 1: Flight Data**
-| Flight | From | To | Sched. Dep | Actual Dep | Sched. Arr | Actual Arr | Delay | Status |
-|--------|------|----|-----------:|-----------:|------------|------------|------:|--------|
+#### **Sheet 1: "Flight Data"** 📊
+Contains all individual flight records with complete details:
+
+| Flight | From | To | Sched. Dep | Actual Dep | Sched. Arr | Actual Arr | Delay (min) | Status |
+|--------|------|----|-----------:|-----------:|------------|------------|------------:|--------|
 | SQ123 | SIN | LHR | 08:00 | 08:15 | 15:30 | 15:45 | 15 | landed |
+| SQ317 | SIN | LHR | 23:30 | 23:42 | 06:15 | 06:25 | 12 | landed |
 
-**Sheet 2: Summary**
-- Total flights
-- Average delay (minutes)
-- On-time percentage (< 15 min delay)
-- Delayed flights (≥ 15 min)
-- Cancelled flights
-- Flights by status (landed, scheduled, cancelled, etc.)
-- Top 10 routes
+**Features:**
+- All flight records in one table
+- Styled headers (blue background, white text)
+- Auto-adjusted column widths
+- Easy to filter, sort, and analyze
+
+#### **Sheet 2: "Summary"** 📈
+Contains aggregated statistics and insights:
+
+**Key Metrics:**
+- Total Flights
+- Average Delay (minutes)
+- On-Time Performance (%)
+- Delayed Flights (≥15 min)
+- Cancelled Flights
+
+**Breakdowns:**
+- **Flights by Status**: Count of flights by status (landed, scheduled, cancelled, etc.)
+- **Top 10 Routes**: Most frequent routes with flight counts
+
+**Features:**
+- Formatted title with airline name
+- Clear sections with bold labels
+- Easy-to-read layout for reporting
 
 ### CSV Output
 
-Simple flat file with all flight data, easy to import into Excel or databases.
+**Note:** CSV is a single flat file format - it does NOT support multiple sheets. If you need two sheets (flight data + summary), use Excel format instead.
+
+**CSV contains:**
+- All flight records in a simple comma-separated format
+- Easy to import into Excel, databases, or other tools
+- One row per flight with all details
+
+**To get summary statistics with CSV:**
+- Use JSON format which includes both flights and summary
+- Or use Excel format (default) which has both sheets
 
 ### JSON Output
 
@@ -368,3 +396,222 @@ Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guide
 ---
 
 **Happy Flight Tracking! ✈️**
+
+# 🚀 How to Run the Flight Data Fetcher
+
+## Prerequisites
+
+1. **Python 3.11+** installed
+2. **API Key** from [AirLabs.co](https://airlabs.co) (free tier available)
+3. **Dependencies** installed
+
+## Step 1: Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+This installs:
+- `requests` - For API calls
+- `python-dotenv` - For loading API key from .env file
+- `openpyxl` - For Excel export
+- `tqdm` - For progress bars
+
+## Step 2: Set Up API Key
+
+### Option A: Using .env file (Recommended)
+
+1. Create a `.env` file in the project root:
+   ```bash
+   # Windows (PowerShell)
+   echo "AIRLABS_API_KEY=your_actual_api_key_here" > .env
+   
+   # Linux/macOS
+   echo "AIRLABS_API_KEY=your_actual_api_key_here" > .env
+   ```
+
+2. Replace `your_actual_api_key_here` with your actual AirLabs API key
+
+### Option B: Enter when prompted
+
+If no `.env` file exists, the script will prompt you to enter the API key.
+
+## Step 3: Run the Script
+
+### Method 1: Interactive Mode (Easiest) ⭐
+
+Just run the script without any arguments:
+
+```bash
+python fetch_flights.py
+```
+
+The script will guide you through:
+- Selecting an airline (type `list` to see all options)
+- Entering start date (YYYY-MM-DD)
+- Entering end date (or press Enter for same as start)
+- Choosing output format (csv, excel, json)
+
+**Example Interactive Session:**
+```
+==================================================
+AIRLINES FLIGHT DATA FETCHER
+Interactive Mode
+==================================================
+
+Enter airline IATA code (e.g., SQ, EK, BA)
+Type 'list' to see all available airlines
+Airline [SQ]: SQ
+
+Enter start date (YYYY-MM-DD)
+Start date [2026-01-22]: 2026-01-20
+
+Enter end date (YYYY-MM-DD) [same as start]:
+End date [2026-01-20]: 
+
+Output format options: csv, excel, json
+Format [excel]: excel
+```
+
+### Method 2: Command Line Mode
+
+#### List Available Airlines
+
+```bash
+python fetch_flights.py --list-airlines
+```
+
+#### Fetch Yesterday's Flights
+
+```bash
+# Singapore Airlines (default)
+python fetch_flights.py --yesterday
+
+# Specific airline
+python fetch_flights.py --airline SQ --yesterday
+python fetch_flights.py --airline EK --yesterday
+```
+
+#### Fetch Last Week
+
+```bash
+python fetch_flights.py --airline SQ --last-week
+```
+
+#### Fetch Last Month
+
+```bash
+python fetch_flights.py --airline EK --last-month
+```
+
+#### Fetch Specific Date Range
+
+```bash
+# Single day
+python fetch_flights.py --airline SQ --start-date 2026-01-20
+
+# Date range
+python fetch_flights.py --airline EK --start-date 2026-01-01 --end-date 2026-01-07
+```
+
+#### Choose Output Format
+
+```bash
+# CSV format
+python fetch_flights.py --airline SQ --yesterday --format csv
+
+# JSON format
+python fetch_flights.py --airline EK --yesterday --format json
+
+# Excel format (default)
+python fetch_flights.py --airline QR --yesterday --format excel
+```
+
+## Complete Command Reference
+
+```bash
+# Basic usage
+python fetch_flights.py [OPTIONS]
+
+# Options:
+  --airline, -a          Airline IATA code (e.g., SQ, EK, BA)
+  --start-date, -s       Start date (YYYY-MM-DD)
+  --end-date, -e         End date (YYYY-MM-DD)
+  --yesterday            Fetch yesterday's flights
+  --last-week            Fetch last 7 days
+  --last-month           Fetch last 30 days
+  --format, -f           Output format: csv, excel, json (default: excel)
+  --list-airlines        List all available airlines
+  --verbose, -v          Verbose output
+  --help, -h             Show help message
+```
+
+## Example Commands
+
+```bash
+# Quick examples
+python fetch_flights.py --airline SQ --yesterday
+python fetch_flights.py --airline EK --start-date 2026-01-01 --end-date 2026-01-07
+python fetch_flights.py --airline BA --last-week --format csv
+python fetch_flights.py --list-airlines
+
+# Interactive mode (no arguments)
+python fetch_flights.py
+```
+
+## Output Files
+
+All output files are saved in the `outputs/` folder:
+
+- **Excel**: `AIRLINE_YYYY-MM-DD_HHMMSS.xlsx`
+- **CSV**: `AIRLINE_YYYY-MM-DD_HHMMSS.csv`
+- **JSON**: `AIRLINE_YYYY-MM-DD_HHMMSS.json`
+- **Checkpoints**: `checkpoint_AIRLINE_DATE.json` (raw API responses)
+
+## What Happens When You Run It
+
+1. **Configuration Check**: Validates airline code and dates
+2. **Confirmation**: Shows what will be fetched and asks for confirmation
+3. **API Key**: Loads from `.env` or prompts for input
+4. **Fetching**: Makes API calls with progress bar (1 second between calls)
+5. **Processing**: Extracts and normalizes flight data
+6. **Export**: Creates output file in chosen format
+7. **Summary**: Displays statistics (total flights, delays, etc.)
+
+## Troubleshooting
+
+### "API key not found"
+- Create `.env` file with `AIRLABS_API_KEY=your_key`
+- Or enter key when prompted
+
+### "Unknown airline"
+- Run `python fetch_flights.py --list-airlines` to see valid codes
+- Use IATA codes (e.g., SQ, EK, BA) not ICAO codes
+
+### "Invalid date format"
+- Use format: `YYYY-MM-DD` (e.g., 2026-01-20)
+- Not: `01/20/2026` or `20-01-2026`
+
+### "No flights found"
+- Check if airline operated on that date
+- Try a different date or airline
+
+### Timeout errors
+- Check internet connection
+- Wait a few minutes and retry
+- Script automatically retries up to 3 times
+
+## Quick Start Checklist
+
+- [ ] Python 3.11+ installed
+- [ ] Dependencies installed: `pip install -r requirements.txt`
+- [ ] API key obtained from [AirLabs.co](https://airlabs.co)
+- [ ] `.env` file created with API key
+- [ ] Run: `python fetch_flights.py --list-airlines` to verify setup
+- [ ] Run: `python fetch_flights.py --airline SQ --yesterday` for a test
+
+## Need Help?
+
+- Check the [README.md](README.md) for more details
+- See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup
+- Review the script's help: `python fetch_flights.py --help`
