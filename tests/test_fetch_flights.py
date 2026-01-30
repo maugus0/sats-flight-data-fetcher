@@ -108,7 +108,7 @@ class TestFetchSinglePage:
 
             from fetch_flights import fetch_single_page
 
-            result = fetch_single_page(mock_api_key, "SQ", sample_date, offset=100)
+            fetch_single_page(mock_api_key, "SQ", sample_date, offset=100)
 
             # Verify offset was passed to API
             call_args = mock_get.call_args

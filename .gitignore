@@ -32,6 +32,9 @@ ENV/
 *.swp
 *.swo
 *~
+.vs/
+*.sublime-*
+*.code-workspace
 
 # Environment Variables
 .env
@@ -46,13 +49,14 @@ coverage.xml
 .mypy_cache/
 .dmypy.json
 dmypy.json
+.hypothesis/
+.ruff_cache/
 
 # Outputs
 # Keep outputs/ directory but ignore all generated files
-outputs/*.csv
-outputs/*.xlsx
-outputs/*.json
-# Ignore checkpoint files anywhere
+outputs/*
+!outputs/.gitkeep
+# Ignore checkpoint files anywhere (backup pattern)
 checkpoint_*.json
 
 # Logs
@@ -62,6 +66,12 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
 
 # Security Reports
 bandit-report.json
