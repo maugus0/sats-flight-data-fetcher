@@ -20,8 +20,8 @@ A simple, user-friendly Python tool to fetch flight data for any major airline. 
 - **Summary Statistics** - On-time performance, delays, top routes, status breakdown
 - **CI/CD Pipeline** - Automated testing (94.84% coverage), formatting, and security checks
 - **Pre-commit Hooks** - Catch issues before pushing to GitHub
-- **67 Comprehensive Tests** - Full test suite covering all functionality
-- **Hub Airport Filter** - Focus on flights to/from specific airports
+- **67+ Comprehensive Tests** - Full test suite covering all functionality (including hub filter with 5 dedicated tests)
+- **Hub Airport Filter** - Focus on flights to/from specific airports with input validation
 
 ## ⚠️ AirLabs API Limits (Free Tier)
 
@@ -107,6 +107,11 @@ python fetch_flights.py --airline QR --last-week --hub DOH
 - **Without filter:** Random ~100 flights from global network
 - **With `--hub SIN`:** ~100 flights filtered to Singapore routes only ✓
 
+**Validation:**
+- Hub code must be exactly 3 letters (e.g., `SIN`, `DXB`, `LHR`)
+- Case-insensitive (automatically converted to uppercase)
+- Invalid codes will show a helpful error message
+
 ## 📖 Usage Examples
 
 ### Interactive Mode (Easiest)
@@ -155,7 +160,7 @@ python fetch_flights.py --list-airlines
 | `--airline`, `-a` | Airline IATA code | `--airline SQ` |
 | `--start-date`, `-s` | Start date (YYYY-MM-DD) | `--start-date 2025-12-01` |
 | `--end-date`, `-e` | End date (YYYY-MM-DD) | `--end-date 2025-12-31` |
-| `--hub` | Filter to/from airport | `--hub SIN` |
+| `--hub` | Filter to/from airport (3-letter IATA code, validated) | `--hub SIN` |
 | `--yesterday` | Fetch yesterday's flights | `--yesterday` |
 | `--last-week` | Fetch last 7 days | `--last-week` |
 | `--last-month` | Fetch last 30 days | `--last-month` |
@@ -318,7 +323,7 @@ sats-flight-data-fetcher/
 A: This is an AirLabs free tier limitation. Use `--hub` filter to focus on flights to/from your airport of interest (e.g., `--hub SIN` for Singapore).
 
 **Q: What does `--hub` do?**
-A: It filters results to only include flights departing from OR arriving at the specified airport. For example, `--hub SIN` shows only flights connected to Singapore.
+A: It filters results to only include flights departing from OR arriving at the specified airport. For example, `--hub SIN` shows only flights connected to Singapore. The hub code must be a valid 3-letter IATA airport code (e.g., SIN, DXB, LHR) and is automatically validated before use.
 
 **Q: How many API calls do I need?**
 A: 1 API call per day of data. A week needs 7 calls, a month needs ~30 calls.
@@ -383,6 +388,7 @@ Consider upgrading to [AirLabs paid tier](https://airlabs.co/pricing) for more d
 |-------|----------|
 | "Unknown airline" | Run `--list-airlines` to see valid codes |
 | "Invalid date" | Use format `YYYY-MM-DD` (e.g., 2025-01-20) |
+| "Hub must be a 3-letter airport code" | Use valid IATA codes like SIN, DXB, LHR (exactly 3 letters) |
 | Timeout errors | Check internet connection, retry in a few minutes |
 | CI/CD badge shows "no status" | Push code, wait for workflow to complete. Check [Actions tab](https://github.com/maugus0/sats-flight-data-fetcher/actions) |
 
