@@ -15,16 +15,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class TestFetchFlightsForDate:
-    """Tests for fetch_flights_for_date function"""
+    """Tests for fetch_flights_for_date function (with pagination)"""
 
-    def test_fetch_success(self, mock_api_key, mock_api_response, sample_date):
-        """Test successful flight data fetch"""
-        with patch("requests.get") as mock_get:
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = mock_api_response
-            mock_response.raise_for_status = Mock()
-            mock_get.return_value = mock_response
+    def test_fetch_success_single_page(
+        self, mock_api_key, mock_api_response, sample_date
+    ):
+        """Test successful flight data fetch (single page, < 50 results)"""
+        with patch("fetch_flights.fetch_single_page") as mock_fetch:
+            mock_fetch.return_value = mock_api_response
 
             from fetch_flights import fetch_flights_for_date
 
@@ -33,18 +31,157 @@ class TestFetchFlightsForDate:
             assert result is not None
             assert "response" in result
             assert len(result["response"]) == 3
+            assert result.get("pages_fetched") == 1
+
+    def test_fetch_success_multiple_pages(self, mock_api_key, sample_date):
+        """Test pagination - fetches multiple pages when 50+ results"""
+        page1 = {"response": [{"flight_iata": f"SQ{i}"} for i in range(50)]}
+        page2 = {"response": [{"flight_iata": f"SQ{i}"} for i in range(50, 80)]}
+
+        with patch("fetch_flights.fetch_single_page") as mock_fetch:
+            mock_fetch.side_effect = [page1, page2]
+
+            from fetch_flights import fetch_flights_for_date
+
+            with patch("time.sleep"):  # Skip pagination delay
+                result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
+
+            assert result is not None
+            assert len(result["response"]) == 80  # 50 + 30
+            assert result.get("pages_fetched") == 2
+            assert mock_fetch.call_count == 2
 
     def test_fetch_timeout(self, mock_api_key, sample_date):
         """Test handling of request timeout"""
-        with patch("requests.get") as mock_get:
-            mock_get.side_effect = requests.exceptions.Timeout("Connection timeout")
+        with patch("fetch_flights.fetch_single_page") as mock_fetch:
+            mock_fetch.return_value = None
 
             from fetch_flights import fetch_flights_for_date
 
             result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
             assert result is None
 
-    def test_fetch_http_error(self, mock_api_key, sample_date):
+    def test_fetch_empty_response(self, mock_api_key, sample_date):
+        """Test handling of empty response"""
+        with patch("fetch_flights.fetch_single_page") as mock_fetch:
+            mock_fetch.return_value = {"response": []}
+
+            from fetch_flights import fetch_flights_for_date
+
+            result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
+
+            assert result is not None
+            assert result["response"] == []
+            assert result.get("pages_fetched") == 1  # Issue 11: Verify pages_fetched
+
+    def test_fetch_pagination_fails_midway(self, mock_api_key, sample_date):
+        """Test pagination failure mid-way returns partial data (Issue 9)"""
+        page1 = {"response": [{"flight_iata": f"SQ{i}"} for i in range(50)]}
+
+        with patch("fetch_flights.fetch_single_page") as mock_fetch:
+            # First page succeeds, second page fails
+            mock_fetch.side_effect = [page1, None]
+
+            from fetch_flights import fetch_flights_for_date
+
+            with patch("time.sleep"):  # Skip pagination delay
+                result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
+
+            assert result is not None
+            assert len(result["response"]) == 50  # Only first page data
+            assert result.get("pages_fetched") == 1
+
+    def test_fetch_exactly_50_flights_single_page(self, mock_api_key, sample_date):
+        """Test edge case where exactly 50 flights returned then empty page (Issue 10)"""
+        page1 = {"response": [{"flight_iata": f"SQ{i}"} for i in range(50)]}
+        page2 = {"response": []}  # Empty second page
+
+        with patch("fetch_flights.fetch_single_page") as mock_fetch:
+            mock_fetch.side_effect = [page1, page2]
+
+            from fetch_flights import fetch_flights_for_date
+
+            with patch("time.sleep"):
+                result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
+
+            assert result is not None
+            assert len(result["response"]) == 50
+            assert result.get("pages_fetched") == 2  # Still fetched 2 pages to verify
+
+    def test_fetch_hits_max_pagination_limit(self, mock_api_key, sample_date):
+        """Test safety limit prevents infinite loops"""
+        # Create a page that always returns exactly 50 results (simulating API bug)
+        full_page = {"response": [{"flight_iata": f"SQ{i}"} for i in range(50)]}
+
+        with patch("fetch_flights.fetch_single_page") as mock_fetch:
+            # Return 50 results indefinitely (API_PAGE_LIMIT)
+            mock_fetch.return_value = full_page
+
+            from fetch_flights import MAX_PAGINATION_PAGES, fetch_flights_for_date
+
+            with patch("time.sleep"):
+                result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
+
+            assert result is not None
+            # Should stop at MAX_PAGINATION_PAGES
+            assert result.get("pages_fetched") == MAX_PAGINATION_PAGES
+            assert mock_fetch.call_count == MAX_PAGINATION_PAGES
+
+
+class TestFetchSinglePage:
+    """Tests for fetch_single_page function (low-level API call)"""
+
+    def test_fetch_single_page_success(
+        self, mock_api_key, mock_api_response, sample_date
+    ):
+        """Test successful single page fetch"""
+        with patch("requests.get") as mock_get:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = mock_api_response
+            mock_response.raise_for_status = Mock()
+            mock_get.return_value = mock_response
+
+            from fetch_flights import fetch_single_page
+
+            result = fetch_single_page(mock_api_key, "SQ", sample_date, offset=0)
+
+            assert result is not None
+            assert "response" in result
+
+    def test_fetch_single_page_with_offset(
+        self, mock_api_key, mock_api_response, sample_date
+    ):
+        """Test fetch with offset parameter"""
+        with patch("requests.get") as mock_get:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = mock_api_response
+            mock_response.raise_for_status = Mock()
+            mock_get.return_value = mock_response
+
+            from fetch_flights import fetch_single_page
+
+            fetch_single_page(mock_api_key, "SQ", sample_date, offset=100)
+
+            # Verify offset was passed to API
+            call_args = mock_get.call_args
+            assert call_args[1]["params"]["offset"] == 100
+            assert call_args[1]["params"]["limit"] == 50  # AirLabs FREE tier limit
+
+    def test_fetch_single_page_timeout(self, mock_api_key, sample_date):
+        """Test handling of request timeout"""
+        with patch("requests.get") as mock_get:
+            mock_get.side_effect = requests.exceptions.Timeout("Connection timeout")
+
+            from fetch_flights import fetch_single_page
+
+            with patch("time.sleep"):  # Skip retry delays
+                result = fetch_single_page(mock_api_key, "SQ", sample_date)
+
+            assert result is None
+
+    def test_fetch_single_page_http_error(self, mock_api_key, sample_date):
         """Test handling of HTTP errors"""
         with patch("requests.get") as mock_get:
             mock_response = Mock()
@@ -54,12 +191,12 @@ class TestFetchFlightsForDate:
             )
             mock_get.return_value = mock_response
 
-            from fetch_flights import fetch_flights_for_date
+            from fetch_flights import fetch_single_page
 
-            result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
+            result = fetch_single_page(mock_api_key, "SQ", sample_date)
             assert result is None
 
-    def test_fetch_api_error_response(self, mock_api_key, sample_date):
+    def test_fetch_single_page_api_error_response(self, mock_api_key, sample_date):
         """Test handling of API error in response"""
         with patch("requests.get") as mock_get:
             mock_response = Mock()
@@ -68,9 +205,9 @@ class TestFetchFlightsForDate:
             mock_response.raise_for_status = Mock()
             mock_get.return_value = mock_response
 
-            from fetch_flights import fetch_flights_for_date
+            from fetch_flights import fetch_single_page
 
-            result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
+            result = fetch_single_page(mock_api_key, "SQ", sample_date)
             assert result is None
 
 
@@ -117,6 +254,71 @@ class TestExtractFlightData:
         assert flights[0]["departure_airport"] == ""
         assert flights[0]["delay_minutes"] == 0
         assert flights[0]["flight_status"] == "unknown"
+
+
+class TestFilterByHub:
+    """Tests for filter_by_hub function"""
+
+    def test_filter_by_departure_airport(self):
+        """Test filtering flights by departure airport"""
+        from fetch_flights import filter_by_hub
+
+        flights = [
+            {"departure_airport": "SIN", "arrival_airport": "HKG"},
+            {"departure_airport": "KUL", "arrival_airport": "BKK"},
+            {"departure_airport": "SIN", "arrival_airport": "NRT"},
+        ]
+        result = filter_by_hub(flights, "SIN")
+        assert len(result) == 2
+        assert all(f["departure_airport"] == "SIN" for f in result)
+
+    def test_filter_by_arrival_airport(self):
+        """Test filtering flights by arrival airport"""
+        from fetch_flights import filter_by_hub
+
+        flights = [
+            {"departure_airport": "HKG", "arrival_airport": "SIN"},
+            {"departure_airport": "KUL", "arrival_airport": "BKK"},
+            {"departure_airport": "NRT", "arrival_airport": "SIN"},
+        ]
+        result = filter_by_hub(flights, "SIN")
+        assert len(result) == 2
+        assert all(f["arrival_airport"] == "SIN" for f in result)
+
+    def test_filter_case_insensitive(self):
+        """Test hub filter is case-insensitive"""
+        from fetch_flights import filter_by_hub
+
+        flights = [
+            {"departure_airport": "SIN", "arrival_airport": "HKG"},
+            {"departure_airport": "KUL", "arrival_airport": "BKK"},
+        ]
+        result = filter_by_hub(flights, "sin")  # lowercase input
+        assert len(result) == 1
+
+    def test_filter_no_matches(self):
+        """Test filter returns empty list when no flights match"""
+        from fetch_flights import filter_by_hub
+
+        flights = [
+            {"departure_airport": "HKG", "arrival_airport": "NRT"},
+            {"departure_airport": "KUL", "arrival_airport": "BKK"},
+        ]
+        result = filter_by_hub(flights, "SIN")
+        assert result == []
+
+    def test_filter_missing_airport_fields(self):
+        """Test filter handles missing airport fields gracefully"""
+        from fetch_flights import filter_by_hub
+
+        flights = [
+            {"departure_airport": "SIN", "arrival_airport": "HKG"},
+            {"departure_airport": "KUL"},  # Missing arrival_airport
+            {},  # Missing both fields
+            {"arrival_airport": "SIN"},  # Missing departure_airport
+        ]
+        result = filter_by_hub(flights, "SIN")
+        assert len(result) == 2  # Only flights with SIN in valid fields
 
 
 class TestGenerateSummary:
@@ -369,11 +571,11 @@ class TestGetApiKey:
 
 
 class TestFetchFlightsRetry:
-    """Tests for fetch_flights_for_date retry logic"""
+    """Tests for fetch_single_page retry logic"""
 
     def test_fetch_retry_on_timeout(self, mock_api_key, sample_date):
         """Test retry logic on timeout"""
-        from fetch_flights import fetch_flights_for_date
+        from fetch_flights import fetch_single_page
 
         with patch("requests.get") as mock_get:
             # First two attempts timeout, third succeeds
@@ -389,14 +591,14 @@ class TestFetchFlightsRetry:
             ]
 
             with patch("time.sleep"):
-                result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
+                result = fetch_single_page(mock_api_key, "SQ", sample_date)
 
             assert result is not None
             assert mock_get.call_count == 3
 
     def test_fetch_retry_on_rate_limit(self, mock_api_key, sample_date):
         """Test retry logic on rate limiting"""
-        from fetch_flights import fetch_flights_for_date
+        from fetch_flights import fetch_single_page
 
         with patch("requests.get") as mock_get:
             mock_response_429 = Mock()
@@ -413,7 +615,7 @@ class TestFetchFlightsRetry:
             mock_get.side_effect = [mock_response_429, mock_response_200]
 
             with patch("time.sleep"):
-                result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
+                result = fetch_single_page(mock_api_key, "SQ", sample_date)
 
             assert result is not None
             assert mock_get.call_count == 2
@@ -534,7 +736,7 @@ class TestInteractiveMode:
 
 
 class TestFetchDateRange:
-    """Tests for fetch_date_range function"""
+    """Tests for fetch_date_range function (with pagination support)"""
 
     @patch("fetch_flights.tqdm")
     @patch("fetch_flights.fetch_flights_for_date")
@@ -552,7 +754,9 @@ class TestFetchDateRange:
         """Test fetching single day"""
         from fetch_flights import fetch_date_range
 
-        mock_fetch.return_value = mock_api_response
+        # Add pages_fetched to mock response (pagination metadata)
+        mock_response = {**mock_api_response, "pages_fetched": 1}
+        mock_fetch.return_value = mock_response
         mock_tqdm.return_value.__enter__.return_value = Mock()
 
         flights = fetch_date_range(mock_api_key, "SQ", "2025-01-01", "2025-01-01")
@@ -577,7 +781,9 @@ class TestFetchDateRange:
         """Test fetching multiple days"""
         from fetch_flights import fetch_date_range
 
-        mock_fetch.return_value = mock_api_response
+        # Add pages_fetched to mock response (pagination metadata)
+        mock_response = {**mock_api_response, "pages_fetched": 1}
+        mock_fetch.return_value = mock_response
         mock_tqdm.return_value.__enter__.return_value = Mock()
 
         flights = fetch_date_range(mock_api_key, "SQ", "2025-01-01", "2025-01-03")

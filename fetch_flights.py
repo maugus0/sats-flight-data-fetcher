@@ -43,8 +43,14 @@ load_dotenv()
 AIRLABS_BASE_URL = "https://airlabs.co/api/v9/schedules"
 CONFIG_FILE = "airlines_config.json"
 OUTPUT_DIR = "outputs"
-RATE_LIMIT_DELAY = 1  # seconds between API calls
+RATE_LIMIT_DELAY = 1  # seconds between API calls (between days)
 MAX_RETRIES = 3
+API_PAGE_LIMIT = 50  # Max results per API request (AirLabs FREE tier limit)
+MAX_PAGINATION_PAGES = 50  # Safety limit to prevent infinite loops
+# Pagination delay can be shorter than RATE_LIMIT_DELAY because:
+# 1. We're within the same logical request (fetching all pages for one day)
+# 2. AirLabs rate limits are typically per-minute, allowing burst requests
+PAGINATION_DELAY = 0.5  # seconds between pagination requests
 
 # CSV/Excel field names
 FIELD_NAMES = [
@@ -150,9 +156,17 @@ def get_api_key() -> str:
     return api_key
 
 
-def fetch_flights_for_date(api_key: str, airline_iata: str, date: str) -> dict | None:
-    """Fetch flights for a specific airline and date with retry logic."""
-    params = {"api_key": api_key, "airline_iata": airline_iata, "dep_date": date}
+def fetch_single_page(
+    api_key: str, airline_iata: str, date: str, offset: int = 0
+) -> dict | None:
+    """Fetch a single page of flights with retry logic."""
+    params = {
+        "api_key": api_key,
+        "airline_iata": airline_iata,
+        "dep_date": date,
+        "limit": API_PAGE_LIMIT,
+        "offset": offset,
+    }
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
@@ -192,6 +206,67 @@ def fetch_flights_for_date(api_key: str, airline_iata: str, date: str) -> dict |
             return None
 
     return None
+
+
+def fetch_flights_for_date(
+    api_key: str, airline_iata: str, date: str, verbose: bool = False
+) -> dict | None:
+    """Fetch ALL flights for a date with pagination support."""
+    all_flights = []
+    offset = 0
+    page_count = 0
+
+    while page_count < MAX_PAGINATION_PAGES:  # Safety limit to prevent infinite loops
+        # Fetch current page
+        data = fetch_single_page(api_key, airline_iata, date, offset)
+
+        if data is None:
+            if all_flights:
+                # Log warning about partial data when pagination fails mid-way
+                print(
+                    f"  [WARN] {date}: Pagination failed after {page_count} pages, returning partial data"
+                )
+                break
+            return None
+
+        flights = data.get("response", [])
+        page_count += 1
+
+        if not flights:
+            break  # No more data
+
+        all_flights.extend(flights)
+
+        if verbose:
+            print(
+                f"  [DEBUG] Page {page_count}: {len(flights)} flights (offset: {offset})"
+            )
+
+        # Check if we got all flights (fewer than limit means last page)
+        if len(flights) < API_PAGE_LIMIT:
+            break
+
+        # Move to next page
+        offset += API_PAGE_LIMIT
+        time.sleep(PAGINATION_DELAY)  # Rate limiting between pages
+
+    # Warn if we hit the safety limit
+    if page_count >= MAX_PAGINATION_PAGES:
+        print(
+            f"  [WARN] {date}: Hit max pagination limit ({MAX_PAGINATION_PAGES} pages). Data may be incomplete."
+        )
+
+    return {"response": all_flights, "pages_fetched": page_count}
+
+
+def filter_by_hub(flights: list[dict], hub_iata: str) -> list[dict]:
+    """Filter flights to only include those to/from the specified hub airport."""
+    hub = hub_iata.upper()
+    return [
+        f
+        for f in flights
+        if f.get("departure_airport") == hub or f.get("arrival_airport") == hub
+    ]
 
 
 def extract_flight_data(raw_data: dict) -> list[dict]:
@@ -457,35 +532,72 @@ def interactive_mode(config: dict) -> tuple:
 
 
 def fetch_date_range(
-    api_key: str, airline: str, start_date: str, end_date: str
+    api_key: str,
+    airline: str,
+    start_date: str,
+    end_date: str,
+    verbose: bool = False,
+    hub: str = None,
 ) -> list[dict]:
-    """Fetch flights for a date range with progress bar."""
+    """Fetch flights for a date range with pagination and progress bar."""
     start = datetime.strptime(start_date, "%Y-%m-%d")
     end = datetime.strptime(end_date, "%Y-%m-%d")
 
     total_days = (end - start).days + 1
     all_flights = []
+    daily_stats = []
 
     print(f"\n[INFO] Fetching {total_days} day(s) of data for {airline}...")
+    print("[INFO] Pagination enabled - fetching ALL flights per day")
 
     with tqdm(total=total_days, desc="Fetching", unit="day") as pbar:
         current = start
         while current <= end:
             date_str = current.strftime("%Y-%m-%d")
 
-            raw_data = fetch_flights_for_date(api_key, airline, date_str)
+            raw_data = fetch_flights_for_date(api_key, airline, date_str, verbose)
 
             if raw_data:
                 flights = extract_flight_data(raw_data)
+
+                # Apply hub filter if specified
+                if hub:
+                    flights = filter_by_hub(flights, hub)
+
+                day_count = len(flights)
+                pages = raw_data.get("pages_fetched", 1)
                 all_flights.extend(flights)
+                daily_stats.append(
+                    {"date": date_str, "flights": day_count, "pages": pages}
+                )
                 save_checkpoint(raw_data, airline, date_str)
+
+                # Update progress bar with flight count
+                if hub:
+                    pbar.set_postfix(
+                        {"flights": f"{day_count} (filtered)", "pages": pages}
+                    )
+                else:
+                    pbar.set_postfix({"flights": day_count, "pages": pages})
+
+            else:
+                daily_stats.append({"date": date_str, "flights": 0, "pages": 0})
 
             current += timedelta(days=1)
             pbar.update(1)
 
-            # Rate limiting
+            # Rate limiting between days
             if current <= end:
                 time.sleep(RATE_LIMIT_DELAY)
+
+    # Print daily statistics summary
+    if daily_stats:
+        flight_counts = [d["flights"] for d in daily_stats]
+        avg_flights = sum(flight_counts) / len(flight_counts) if flight_counts else 0
+        min_flights = min(flight_counts)
+        max_flights = max(flight_counts)
+        print("\n[INFO] Daily flight statistics:")
+        print(f"  Min: {min_flights} | Max: {max_flights} | Avg: {avg_flights:.0f}")
 
     return all_flights
 
@@ -514,6 +626,10 @@ Examples:
     )
     parser.add_argument("--last-week", action="store_true", help="Fetch last 7 days")
     parser.add_argument("--last-month", action="store_true", help="Fetch last 30 days")
+    parser.add_argument(
+        "--hub",
+        help="Filter flights to/from this airport (e.g., SIN for Singapore hub)",
+    )
     parser.add_argument(
         "--format",
         "-f",
@@ -601,8 +717,10 @@ Examples:
     print(f"Date range:   {start_date} to {end_date}")
     print(f"Total days:   {total_days}")
     print(f"API calls:    {total_days}")
-    print(f"Est. time:    ~{est_time} seconds")
+    print(f"Est. time:    ~{est_time} seconds (minimum, may vary with pagination)")
     print(f"Output:       {output_format.upper()}")
+    if args.hub:
+        print(f"Hub filter:   {args.hub.upper()} (to/from only)")
     print("=" * 50)
 
     confirm = input("\nProceed? [Y/n]: ").strip().lower()
@@ -616,8 +734,16 @@ Examples:
     if not validate_api_key(api_key):
         print("[WARN] API key format looks unusual, proceeding anyway...")
 
-    # Fetch flights
-    flights = fetch_date_range(api_key, airline, start_date, end_date)
+    # Fetch flights (with verbose flag for pagination debug info)
+    verbose = args.verbose
+    hub = args.hub if args.hub else None
+    if hub:
+        if not (len(hub) == 3 and hub.isalpha()):
+            print("[ERROR] Hub must be a 3-letter airport code (e.g., SIN, DXB, LHR)")
+            print(f"        Got: '{hub}'")
+            sys.exit(1)
+        hub = hub.upper()
+    flights = fetch_date_range(api_key, airline, start_date, end_date, verbose, hub)
 
     if not flights:
         print("\n[WARN] No flights found for the specified criteria")
