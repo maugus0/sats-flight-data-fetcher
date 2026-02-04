@@ -20,7 +20,7 @@ class TestFetchFlightsForDate:
     def test_fetch_success_single_page(
         self, mock_api_key, mock_api_response, sample_date
     ):
-        """Test successful flight data fetch (single page, < 100 results)"""
+        """Test successful flight data fetch (single page, < 50 results)"""
         with patch("fetch_flights.fetch_single_page") as mock_fetch:
             mock_fetch.return_value = mock_api_response
 
@@ -114,7 +114,7 @@ class TestFetchFlightsForDate:
         full_page = {"response": [{"flight_iata": f"SQ{i}"} for i in range(50)]}
 
         with patch("fetch_flights.fetch_single_page") as mock_fetch:
-            # Return 100 results indefinitely
+            # Return 50 results indefinitely (API_PAGE_LIMIT)
             mock_fetch.return_value = full_page
 
             from fetch_flights import MAX_PAGINATION_PAGES, fetch_flights_for_date
@@ -254,6 +254,71 @@ class TestExtractFlightData:
         assert flights[0]["departure_airport"] == ""
         assert flights[0]["delay_minutes"] == 0
         assert flights[0]["flight_status"] == "unknown"
+
+
+class TestFilterByHub:
+    """Tests for filter_by_hub function"""
+
+    def test_filter_by_departure_airport(self):
+        """Test filtering flights by departure airport"""
+        from fetch_flights import filter_by_hub
+
+        flights = [
+            {"departure_airport": "SIN", "arrival_airport": "HKG"},
+            {"departure_airport": "KUL", "arrival_airport": "BKK"},
+            {"departure_airport": "SIN", "arrival_airport": "NRT"},
+        ]
+        result = filter_by_hub(flights, "SIN")
+        assert len(result) == 2
+        assert all(f["departure_airport"] == "SIN" for f in result)
+
+    def test_filter_by_arrival_airport(self):
+        """Test filtering flights by arrival airport"""
+        from fetch_flights import filter_by_hub
+
+        flights = [
+            {"departure_airport": "HKG", "arrival_airport": "SIN"},
+            {"departure_airport": "KUL", "arrival_airport": "BKK"},
+            {"departure_airport": "NRT", "arrival_airport": "SIN"},
+        ]
+        result = filter_by_hub(flights, "SIN")
+        assert len(result) == 2
+        assert all(f["arrival_airport"] == "SIN" for f in result)
+
+    def test_filter_case_insensitive(self):
+        """Test hub filter is case-insensitive"""
+        from fetch_flights import filter_by_hub
+
+        flights = [
+            {"departure_airport": "SIN", "arrival_airport": "HKG"},
+            {"departure_airport": "KUL", "arrival_airport": "BKK"},
+        ]
+        result = filter_by_hub(flights, "sin")  # lowercase input
+        assert len(result) == 1
+
+    def test_filter_no_matches(self):
+        """Test filter returns empty list when no flights match"""
+        from fetch_flights import filter_by_hub
+
+        flights = [
+            {"departure_airport": "HKG", "arrival_airport": "NRT"},
+            {"departure_airport": "KUL", "arrival_airport": "BKK"},
+        ]
+        result = filter_by_hub(flights, "SIN")
+        assert result == []
+
+    def test_filter_missing_airport_fields(self):
+        """Test filter handles missing airport fields gracefully"""
+        from fetch_flights import filter_by_hub
+
+        flights = [
+            {"departure_airport": "SIN", "arrival_airport": "HKG"},
+            {"departure_airport": "KUL"},  # Missing arrival_airport
+            {},  # Missing both fields
+            {"arrival_airport": "SIN"},  # Missing departure_airport
+        ]
+        result = filter_by_hub(flights, "SIN")
+        assert len(result) == 2  # Only flights with SIN in valid fields
 
 
 class TestGenerateSummary:

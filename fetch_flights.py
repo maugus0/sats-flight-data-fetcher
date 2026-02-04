@@ -256,12 +256,6 @@ def fetch_flights_for_date(
             f"  [WARN] {date}: Hit max pagination limit ({MAX_PAGINATION_PAGES} pages). Data may be incomplete."
         )
 
-    # Warn if exactly at limit on a single page (might be missing data)
-    if len(all_flights) == API_PAGE_LIMIT and page_count == 1:
-        print(
-            f"  [WARN] {date}: Exactly {API_PAGE_LIMIT} flights on single page - verify pagination working"
-        )
-
     return {"response": all_flights, "pages_fetched": page_count}
 
 
@@ -271,7 +265,7 @@ def filter_by_hub(flights: list[dict], hub_iata: str) -> list[dict]:
     return [
         f
         for f in flights
-        if f["departure_airport"] == hub or f["arrival_airport"] == hub
+        if f.get("departure_airport") == hub or f.get("arrival_airport") == hub
     ]
 
 
@@ -579,7 +573,12 @@ def fetch_date_range(
                 save_checkpoint(raw_data, airline, date_str)
 
                 # Update progress bar with flight count
-                pbar.set_postfix({"flights": day_count, "pages": pages})
+                if hub:
+                    pbar.set_postfix(
+                        {"flights": f"{day_count} (filtered)", "pages": pages}
+                    )
+                else:
+                    pbar.set_postfix({"flights": day_count, "pages": pages})
 
             else:
                 daily_stats.append({"date": date_str, "flights": 0, "pages": 0})
@@ -718,7 +717,7 @@ Examples:
     print(f"Date range:   {start_date} to {end_date}")
     print(f"Total days:   {total_days}")
     print(f"API calls:    {total_days}")
-    print(f"Est. time:    ~{est_time} seconds")
+    print(f"Est. time:    ~{est_time} seconds (minimum, may vary with pagination)")
     print(f"Output:       {output_format.upper()}")
     if args.hub:
         print(f"Hub filter:   {args.hub.upper()} (to/from only)")
@@ -738,6 +737,12 @@ Examples:
     # Fetch flights (with verbose flag for pagination debug info)
     verbose = args.verbose
     hub = args.hub if args.hub else None
+    if hub:
+        if not (len(hub) == 3 and hub.isalpha()):
+            print("[ERROR] Hub must be a 3-letter airport code (e.g., SIN, DXB, LHR)")
+            print(f"        Got: '{hub}'")
+            sys.exit(1)
+        hub = hub.upper()
     flights = fetch_date_range(api_key, airline, start_date, end_date, verbose, hub)
 
     if not flights:
