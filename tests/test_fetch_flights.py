@@ -34,9 +34,9 @@ class TestFetchFlightsForDate:
             assert result.get("pages_fetched") == 1
 
     def test_fetch_success_multiple_pages(self, mock_api_key, sample_date):
-        """Test pagination - fetches multiple pages when 100+ results"""
-        page1 = {"response": [{"flight_iata": f"SQ{i}"} for i in range(100)]}
-        page2 = {"response": [{"flight_iata": f"SQ{i}"} for i in range(100, 150)]}
+        """Test pagination - fetches multiple pages when 50+ results"""
+        page1 = {"response": [{"flight_iata": f"SQ{i}"} for i in range(50)]}
+        page2 = {"response": [{"flight_iata": f"SQ{i}"} for i in range(50, 80)]}
 
         with patch("fetch_flights.fetch_single_page") as mock_fetch:
             mock_fetch.side_effect = [page1, page2]
@@ -47,7 +47,7 @@ class TestFetchFlightsForDate:
                 result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
 
             assert result is not None
-            assert len(result["response"]) == 150  # 100 + 50
+            assert len(result["response"]) == 80  # 50 + 30
             assert result.get("pages_fetched") == 2
             assert mock_fetch.call_count == 2
 
@@ -76,7 +76,7 @@ class TestFetchFlightsForDate:
 
     def test_fetch_pagination_fails_midway(self, mock_api_key, sample_date):
         """Test pagination failure mid-way returns partial data (Issue 9)"""
-        page1 = {"response": [{"flight_iata": f"SQ{i}"} for i in range(100)]}
+        page1 = {"response": [{"flight_iata": f"SQ{i}"} for i in range(50)]}
 
         with patch("fetch_flights.fetch_single_page") as mock_fetch:
             # First page succeeds, second page fails
@@ -88,12 +88,12 @@ class TestFetchFlightsForDate:
                 result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
 
             assert result is not None
-            assert len(result["response"]) == 100  # Only first page data
+            assert len(result["response"]) == 50  # Only first page data
             assert result.get("pages_fetched") == 1
 
-    def test_fetch_exactly_100_flights_single_page(self, mock_api_key, sample_date):
-        """Test edge case where exactly 100 flights returned then empty page (Issue 10)"""
-        page1 = {"response": [{"flight_iata": f"SQ{i}"} for i in range(100)]}
+    def test_fetch_exactly_50_flights_single_page(self, mock_api_key, sample_date):
+        """Test edge case where exactly 50 flights returned then empty page (Issue 10)"""
+        page1 = {"response": [{"flight_iata": f"SQ{i}"} for i in range(50)]}
         page2 = {"response": []}  # Empty second page
 
         with patch("fetch_flights.fetch_single_page") as mock_fetch:
@@ -105,13 +105,13 @@ class TestFetchFlightsForDate:
                 result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
 
             assert result is not None
-            assert len(result["response"]) == 100
+            assert len(result["response"]) == 50
             assert result.get("pages_fetched") == 2  # Still fetched 2 pages to verify
 
     def test_fetch_hits_max_pagination_limit(self, mock_api_key, sample_date):
         """Test safety limit prevents infinite loops"""
-        # Create a page that always returns exactly 100 results (simulating API bug)
-        full_page = {"response": [{"flight_iata": f"SQ{i}"} for i in range(100)]}
+        # Create a page that always returns exactly 50 results (simulating API bug)
+        full_page = {"response": [{"flight_iata": f"SQ{i}"} for i in range(50)]}
 
         with patch("fetch_flights.fetch_single_page") as mock_fetch:
             # Return 100 results indefinitely
@@ -167,7 +167,7 @@ class TestFetchSinglePage:
             # Verify offset was passed to API
             call_args = mock_get.call_args
             assert call_args[1]["params"]["offset"] == 100
-            assert call_args[1]["params"]["limit"] == 100
+            assert call_args[1]["params"]["limit"] == 50  # AirLabs FREE tier limit
 
     def test_fetch_single_page_timeout(self, mock_api_key, sample_date):
         """Test handling of request timeout"""

@@ -45,7 +45,7 @@ CONFIG_FILE = "airlines_config.json"
 OUTPUT_DIR = "outputs"
 RATE_LIMIT_DELAY = 1  # seconds between API calls (between days)
 MAX_RETRIES = 3
-API_PAGE_LIMIT = 100  # Max results per API request (AirLabs default)
+API_PAGE_LIMIT = 50  # Max results per API request (AirLabs FREE tier limit)
 MAX_PAGINATION_PAGES = 50  # Safety limit to prevent infinite loops
 # Pagination delay can be shorter than RATE_LIMIT_DELAY because:
 # 1. We're within the same logical request (fetching all pages for one day)
@@ -263,6 +263,16 @@ def fetch_flights_for_date(
         )
 
     return {"response": all_flights, "pages_fetched": page_count}
+
+
+def filter_by_hub(flights: list[dict], hub_iata: str) -> list[dict]:
+    """Filter flights to only include those to/from the specified hub airport."""
+    hub = hub_iata.upper()
+    return [
+        f
+        for f in flights
+        if f["departure_airport"] == hub or f["arrival_airport"] == hub
+    ]
 
 
 def extract_flight_data(raw_data: dict) -> list[dict]:
@@ -528,7 +538,12 @@ def interactive_mode(config: dict) -> tuple:
 
 
 def fetch_date_range(
-    api_key: str, airline: str, start_date: str, end_date: str, verbose: bool = False
+    api_key: str,
+    airline: str,
+    start_date: str,
+    end_date: str,
+    verbose: bool = False,
+    hub: str = None,
 ) -> list[dict]:
     """Fetch flights for a date range with pagination and progress bar."""
     start = datetime.strptime(start_date, "%Y-%m-%d")
@@ -550,6 +565,11 @@ def fetch_date_range(
 
             if raw_data:
                 flights = extract_flight_data(raw_data)
+
+                # Apply hub filter if specified
+                if hub:
+                    flights = filter_by_hub(flights, hub)
+
                 day_count = len(flights)
                 pages = raw_data.get("pages_fetched", 1)
                 all_flights.extend(flights)
@@ -607,6 +627,10 @@ Examples:
     )
     parser.add_argument("--last-week", action="store_true", help="Fetch last 7 days")
     parser.add_argument("--last-month", action="store_true", help="Fetch last 30 days")
+    parser.add_argument(
+        "--hub",
+        help="Filter flights to/from this airport (e.g., SIN for Singapore hub)",
+    )
     parser.add_argument(
         "--format",
         "-f",
@@ -696,6 +720,8 @@ Examples:
     print(f"API calls:    {total_days}")
     print(f"Est. time:    ~{est_time} seconds")
     print(f"Output:       {output_format.upper()}")
+    if args.hub:
+        print(f"Hub filter:   {args.hub.upper()} (to/from only)")
     print("=" * 50)
 
     confirm = input("\nProceed? [Y/n]: ").strip().lower()
@@ -711,7 +737,8 @@ Examples:
 
     # Fetch flights (with verbose flag for pagination debug info)
     verbose = args.verbose
-    flights = fetch_date_range(api_key, airline, start_date, end_date, verbose)
+    hub = args.hub if args.hub else None
+    flights = fetch_date_range(api_key, airline, start_date, end_date, verbose, hub)
 
     if not flights:
         print("\n[WARN] No flights found for the specified criteria")
