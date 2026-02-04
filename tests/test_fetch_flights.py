@@ -72,6 +72,60 @@ class TestFetchFlightsForDate:
 
             assert result is not None
             assert result["response"] == []
+            assert result.get("pages_fetched") == 1  # Issue 11: Verify pages_fetched
+
+    def test_fetch_pagination_fails_midway(self, mock_api_key, sample_date):
+        """Test pagination failure mid-way returns partial data (Issue 9)"""
+        page1 = {"response": [{"flight_iata": f"SQ{i}"} for i in range(100)]}
+
+        with patch("fetch_flights.fetch_single_page") as mock_fetch:
+            # First page succeeds, second page fails
+            mock_fetch.side_effect = [page1, None]
+
+            from fetch_flights import fetch_flights_for_date
+
+            with patch("time.sleep"):  # Skip pagination delay
+                result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
+
+            assert result is not None
+            assert len(result["response"]) == 100  # Only first page data
+            assert result.get("pages_fetched") == 1
+
+    def test_fetch_exactly_100_flights_single_page(self, mock_api_key, sample_date):
+        """Test edge case where exactly 100 flights returned then empty page (Issue 10)"""
+        page1 = {"response": [{"flight_iata": f"SQ{i}"} for i in range(100)]}
+        page2 = {"response": []}  # Empty second page
+
+        with patch("fetch_flights.fetch_single_page") as mock_fetch:
+            mock_fetch.side_effect = [page1, page2]
+
+            from fetch_flights import fetch_flights_for_date
+
+            with patch("time.sleep"):
+                result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
+
+            assert result is not None
+            assert len(result["response"]) == 100
+            assert result.get("pages_fetched") == 2  # Still fetched 2 pages to verify
+
+    def test_fetch_hits_max_pagination_limit(self, mock_api_key, sample_date):
+        """Test safety limit prevents infinite loops"""
+        # Create a page that always returns exactly 100 results (simulating API bug)
+        full_page = {"response": [{"flight_iata": f"SQ{i}"} for i in range(100)]}
+
+        with patch("fetch_flights.fetch_single_page") as mock_fetch:
+            # Return 100 results indefinitely
+            mock_fetch.return_value = full_page
+
+            from fetch_flights import MAX_PAGINATION_PAGES, fetch_flights_for_date
+
+            with patch("time.sleep"):
+                result = fetch_flights_for_date(mock_api_key, "SQ", sample_date)
+
+            assert result is not None
+            # Should stop at MAX_PAGINATION_PAGES
+            assert result.get("pages_fetched") == MAX_PAGINATION_PAGES
+            assert mock_fetch.call_count == MAX_PAGINATION_PAGES
 
 
 class TestFetchSinglePage:

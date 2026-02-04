@@ -43,9 +43,13 @@ load_dotenv()
 AIRLABS_BASE_URL = "https://airlabs.co/api/v9/schedules"
 CONFIG_FILE = "airlines_config.json"
 OUTPUT_DIR = "outputs"
-RATE_LIMIT_DELAY = 1  # seconds between API calls
+RATE_LIMIT_DELAY = 1  # seconds between API calls (between days)
 MAX_RETRIES = 3
 API_PAGE_LIMIT = 100  # Max results per API request (AirLabs default)
+MAX_PAGINATION_PAGES = 50  # Safety limit to prevent infinite loops
+# Pagination delay can be shorter than RATE_LIMIT_DELAY because:
+# 1. We're within the same logical request (fetching all pages for one day)
+# 2. AirLabs rate limits are typically per-minute, allowing burst requests
 PAGINATION_DELAY = 0.5  # seconds between pagination requests
 
 # CSV/Excel field names
@@ -212,13 +216,16 @@ def fetch_flights_for_date(
     offset = 0
     page_count = 0
 
-    while True:
+    while page_count < MAX_PAGINATION_PAGES:  # Safety limit to prevent infinite loops
         # Fetch current page
         data = fetch_single_page(api_key, airline_iata, date, offset)
 
         if data is None:
             if all_flights:
-                # Return what we have if we got some data
+                # Log warning about partial data when pagination fails mid-way
+                print(
+                    f"  [WARN] {date}: Pagination failed after {page_count} pages, returning partial data"
+                )
                 break
             return None
 
@@ -243,10 +250,16 @@ def fetch_flights_for_date(
         offset += API_PAGE_LIMIT
         time.sleep(PAGINATION_DELAY)  # Rate limiting between pages
 
-    # Warn if exactly at limit (might be missing data)
-    if len(all_flights) == API_PAGE_LIMIT:
+    # Warn if we hit the safety limit
+    if page_count >= MAX_PAGINATION_PAGES:
         print(
-            f"  [WARN] {date}: Exactly {API_PAGE_LIMIT} flights - verify no pagination needed"
+            f"  [WARN] {date}: Hit max pagination limit ({MAX_PAGINATION_PAGES} pages). Data may be incomplete."
+        )
+
+    # Warn if exactly at limit on a single page (might be missing data)
+    if len(all_flights) == API_PAGE_LIMIT and page_count == 1:
+        print(
+            f"  [WARN] {date}: Exactly {API_PAGE_LIMIT} flights on single page - verify pagination working"
         )
 
     return {"response": all_flights, "pages_fetched": page_count}
@@ -548,11 +561,6 @@ def fetch_date_range(
                 # Update progress bar with flight count
                 pbar.set_postfix({"flights": day_count, "pages": pages})
 
-                # Warn about suspiciously low counts
-                if 0 < day_count < 50:
-                    print(
-                        f"\n  [WARN] {date_str}: Only {day_count} flights - verify data"
-                    )
             else:
                 daily_stats.append({"date": date_str, "flights": 0, "pages": 0})
 
@@ -702,7 +710,7 @@ Examples:
         print("[WARN] API key format looks unusual, proceeding anyway...")
 
     # Fetch flights (with verbose flag for pagination debug info)
-    verbose = args.verbose if hasattr(args, "verbose") else False
+    verbose = args.verbose
     flights = fetch_date_range(api_key, airline, start_date, end_date, verbose)
 
     if not flights:
